@@ -1,0 +1,2 @@
+The root MIT license covers the newly authored Tuntas application code and documentation. It does not relicense the supplied Stitch export, external assets referenced by that export, third-party libraries or fonts. The reference export is excluded from Git by default and is not bundled by the build. Space Grotesk and Plus Jakarta Sans retain their SIL Open Font Licenses; Lucide retains its upstream license. See the respective packages for license texts. The receipt shown in the application is fictional.
+

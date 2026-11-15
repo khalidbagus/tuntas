@@ -1,0 +1,14 @@
+# Provenance and competition status · 15 November 2026
+
+Design source: user-supplied [Google Stitch project](https://stitch.google.com/projects/11813998812690981941), HTML, screenshots and DESIGN.md. User-supplied handover is context, not proof of implementation. The live canvas and exports were inspected before new application code was written. Export files remain local and unmodified. The new app uses local fonts, vector icons, an original synthetic receipt illustration and fictional demo text, not remote reference images, sample profiles or financial/identity records from the designs. No Git history was present or invented.
+
+**Firebase.** [Official rules](https://firebasehybridaihackathon.devpost.com/rules): deadline 1 December 2026, 05:00 WIB. The web track requires Chrome's local model via Firebase AI Logic. Runtime use and App Check matter. A public licensed repository, testable build, English submission and public YouTube demonstration (aim for 3 minutes or less) are still release tasks. Record work done during the contest and disclose pre-existing material. This is local development: no public repository, shared testing credentials, video, deployment or eligibility claim. Check rights to any material before publishing; keep private exports, test tokens and real documents out of a submission.
+
+**Future Tuntas Context.** [Official Relate rules](https://relate.devpost.com/rules): deadline 12 December 2026, 09:00 WIB. Start a genuinely new Relate project during its contest period. Preserve its actual start date and maintain a reuse ledger distinguishing shared Tuntas components from new graph work. Meaningful Relate use, disclosure of reused code and significant AI assistance, and a public GitHub repository with topic `relate` are required. No graph implementation or second entry was created here.
+
+
+## Model clarification — read 15 November 2026
+
+In the [original Discord thread](https://discord.com/channels/861966823054639134/1570510897108222113), another entrant asked whether successful Firebase AI Logic local inference with Chrome reporting Nano v3 met the Nano 4 requirement. On 13 November, **Darveloper | Devpost** relayed Firebase's answer: "Yes that would be fine as long as the model is being accessed via the Firebase AI Logic SDK." The staff reply also suggested a Chrome flag for Gemma 4; changing the working local runtime is not necessary to act on the acceptance clarification.
+
+The [reply to our Devpost question](https://firebasehybridaihackathon.devpost.com/forum_topics/45895-web-track-verifying-gemini-nano-4-versus-chrome-s-v3nano-component) points to this discussion. Both were read in the browser. We treat this model-version concern as resolved for submission planning, while preserving the observed v3Nano identifier and actual SDK-reported local source. This does not certify all eligibility or submission requirements. See [release validation](submission/VALIDATION.md).

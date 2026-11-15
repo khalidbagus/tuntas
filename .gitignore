@@ -1,0 +1,49 @@
+# Dependencies and generated output
+node_modules/
+/dist/
+/coverage/
+/.release/
+playwright-report/
+test-results/
+*.log
+
+# Private environment and local Firebase state
+.env*
+!.env.example
+.firebase/
+*.pem
+*.key
+*service-account*.json
+*serviceAccount*.json
+
+# Keep only app documentation and reviewed synthetic screenshots in Git.
+# Stitch exports, AI prompts/handovers and submission drafts stay on this PC.
+/docs/*
+!/docs/DEVELOPMENT-ACCESS.md
+!/docs/FLOW.md
+!/docs/PROVENANCE.md
+!/docs/STITCH-AUDIT.md
+!/docs/VERIFICATION.md
+!/docs/demo/
+/docs/demo/*
+!/docs/demo/desktop.png
+!/docs/demo/mobile.png
+!/docs/demo/filed-receipt.png
+!/docs/demo/firebase-cloud.jpg
+!/docs/demo/firebase-device.png
+!/docs/demo/mobile-phone.png
+!/docs/demo/mobile-phone-cloud.png
+!/docs/submission/
+/docs/submission/*
+!/docs/submission/JUDGING.md
+!/docs/submission/VALIDATION.md
+
+# Local editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.tmp
+
