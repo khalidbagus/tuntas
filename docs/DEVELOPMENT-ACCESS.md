@@ -1,14 +1,14 @@
-> Current release note (15 November 2026): desktop CPU inference and the four-photo cloud flow have since succeeded. The model-version clarification is recorded in [provenance](PROVENANCE.md); remaining work is tracked in [release validation](submission/VALIDATION.md). Historical observations below retain their original context. The owner is continuing with Codex.
+> Current release note (15 November 2026): desktop CPU inference and the four-photo cloud flow have since succeeded. The model-version clarification is recorded in [provenance](PROVENANCE.md); remaining work is tracked in [release validation](submission/VALIDATION.md). Historical observations below retain their original context.
 
 # Firebase and Android development
 
 ## Current development state
 
-**Subsequent Codex result.** Local text inference now succeeds on the laptop CPU with more free RAM. Both a direct Chrome model prompt and a synthetic Tuntas receipt through Firebase AI Logic succeeded, with zero cloud generation for device-only processing. The installed manifest says `v3Nano`, so the contest's Nano 4 model revision remains unresolved. Four owner-authorized private receipt photos also completed Firebase cloud analysis, review, Library search and reload on Samsung. See the latest [verification entry](VERIFICATION.md).
+**Subsequent verification.** Local text inference now succeeds on the laptop CPU with more free RAM. Both a direct Chrome model prompt and a synthetic Tuntas receipt through Firebase AI Logic succeeded, with zero cloud generation for device-only processing. The installed manifest says `v3Nano`; the contest model-version clarification is recorded in [provenance](PROVENANCE.md). Four owner-authorized private receipt photos also completed Firebase cloud analysis, review, Library search and reload on Samsung. See the latest [verification entry](VERIFICATION.md).
 
 Reproduce the bounded CPU test using `node scripts/verify-nano.mjs --profile <isolated-profile-with-model> --output <private-result-path>`. It uses an isolated desktop Chrome profile and synthetic text. Keep sufficient free RAM while the model is loading.
 
-The owner is continuing with Codex and has no iOS device, so physical Safari testing is deferred. The photographed-receipt cloud flow is now verified on Samsung. Remaining work includes richer secondary-field extraction, retained WebKit coverage and the required local-model revision.
+No iOS device is available, so physical Safari testing is deferred. The photographed-receipt cloud flow is now verified on Samsung. Current validation and remaining release limitations are recorded in [release validation](submission/VALIDATION.md).
 
 Chrome also documents CPU inference. A dedicated GPU is optional when the CPU-path requirements are met. The service crash recorded below is an observation whose cause remains unproven. Treat the bypass flags as historical diagnostics. [Current Chrome requirements](https://developer.chrome.com/docs/ai/get-started)
 

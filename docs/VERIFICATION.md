@@ -1,4 +1,4 @@
-> Current release note (15 November 2026): desktop CPU inference and the four-photo cloud flow have since succeeded. The model-version clarification is recorded in [provenance](PROVENANCE.md); remaining work is tracked in [release validation](submission/VALIDATION.md). Historical observations below retain their original context. The owner is continuing with Codex.
+> Current release note (15 November 2026): desktop CPU inference and the four-photo cloud flow have since succeeded. The model-version clarification is recorded in [provenance](PROVENANCE.md); remaining work is tracked in [release validation](submission/VALIDATION.md). Historical observations below retain their original context.
 
 # Local verification · 15 November 2026
 
@@ -6,7 +6,7 @@
 
 The original Discord clarification was read in the internal browser; see [provenance](PROVENANCE.md). Local submission drafts remain outside Git; public judging instructions and release validation are retained. Release checks passed 14 unit tests, 14 Chromium tests (1.1 minutes) and 14 WebKit tests (1.7 minutes), plus production and fresh-install builds. WebKit initially exposed an early hash-navigation race; subscribing and then reconciling the route fixed it. JPEG/PNG tests now compare exact bytes and MIME after reload. See [full validation and limits](submission/VALIDATION.md). No public release or final video has been produced.
 
-## Codex follow-up with receipt photographs and available RAM
+## Receipt photographs and available RAM
 
 The owner authorized four private receipt photographs for Firebase cloud analysis. Through the connected Samsung Chrome Capture UI, all four returned Firebase · cloud and required image review. Final totals matched visual inspection for every input. Three printed dates were extracted correctly, while the faint fourth date was omitted. Original byte hashes matched all inputs, and filing, Library title search, reload and original preview passed for all four. Some secondary fields, including a visible tax breakdown, were omitted.
 
