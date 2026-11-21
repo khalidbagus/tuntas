@@ -17,7 +17,6 @@ import {
   CircleCheck,
   BookOpen,
 } from "lucide-react";
-import { ReceiptArt } from "./ReceiptArt.jsx";
 export const pathFor = (d) => "/document/" + d.id;
 export const date = (t) =>
   new Intl.DateTimeFormat(undefined, {
@@ -138,23 +137,28 @@ export function Home({ docs, actions, onSample, onCapture, onDrop, busy }) {
         </section>
         <aside className="sample-card">
           <div className="card-top">
-            <span className="overline">Sample document</span>
+            <span className="overline">Sample notice</span>
             <span className="index-no">01 / 01</span>
           </div>
-          <ReceiptArt />
+          <img
+            src="/renewal-icon.png"
+            alt=""
+            className="sample-art"
+            width="128"
+            height="128"
+          />
           <div className="sample-bottom">
             <div>
-              <strong>Fieldnote Supply</strong>
-              <small>Synthetic receipt</small>
+              <strong>Household renewal</strong>
+              <small>Synthetic sample · local rules</small>
             </div>
             <button
+              type="button"
               disabled={busy}
-              className="small-round"
-              aria-label="Try sample receipt"
-              title="Try sample receipt"
+              className="secondary sample-btn"
               onClick={onSample}
             >
-              <ArrowUpRight size={19} />
+              Try sample <ArrowUpRight size={16} />
             </button>
           </div>
         </aside>
@@ -176,7 +180,7 @@ export function Home({ docs, actions, onSample, onCapture, onDrop, busy }) {
             docs.slice(0, 3).map((d) => <DocRow key={d.id} d={d} />)
           ) : (
             <Empty title="Your first document goes here.">
-              Capture your own or try the sample receipt above.
+              Capture your own or try the sample notice above.
             </Empty>
           )}
         </div>
@@ -299,7 +303,7 @@ export function Library({
     </>
   );
 }
-import { matchesQuery, categories } from "./domain.js";
+import { matchesQuery, categories, formatCalendarDate } from "./domain.js";
 export function InboxPage({ docs }) {
   const pending = docs.filter((d) => d.status !== "organized");
   return (
@@ -348,17 +352,17 @@ export function Actions({ docs, actions, onToggle }) {
                     <div className="action-row" key={a.id}>
                       <label className="action-toggle"><input
                         type="checkbox"
-                        id={'action-'+a.id}
+                        id={'action-' + a.id}
                         aria-label={(done ? "Reopen " : "Complete ") + a.title}
                         checked={a.done}
                         onChange={async () => {
-                          if (await onToggle(a.id)) requestAnimationFrame(() => document.getElementById('action-'+a.id)?.focus({preventScroll:true}));
+                          if (await onToggle(a.id)) requestAnimationFrame(() => document.getElementById('action-' + a.id)?.focus({ preventScroll: true }));
                         }}
                       /></label>
                       <div>
                         <strong>{a.title}</strong>
                         <small>
-                          {a.due ? "Due " + a.due + " · " : ""}
+                          {a.due ? "Due " + formatCalendarDate(a.due) + " · " : ""}
                           <a href={"#/document/" + a.documentId}>
                             {docs.find((d) => d.id === a.documentId)?.title ||
                               "Open source"}

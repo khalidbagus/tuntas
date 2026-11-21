@@ -69,24 +69,41 @@ export async function snapshot() {
     actions: actions.sort((a, b) => b.created - a.created),
   };
 }
-export async function addAction(documentId, title, due) {
+export async function addAction(
+  documentId,
+  title,
+  due,
+  { suggestionKey = "", quote = "" } = {},
+) {
   if (!title.trim() || title.length > 140)
     throw Error("Give your action a short title.");
   const database = await db,
     tx = database.transaction(["documents", "actions"], "readwrite");
   if (!(await tx.objectStore("documents").get(documentId)))
     throw Error("The source is missing.");
-  await tx
-    .objectStore("actions")
-    .add({
-      id: crypto.randomUUID(),
-      documentId,
-      title: title.trim(),
-      due,
-      done: false,
-      created: Date.now(),
-    });
+  const store = tx.objectStore("actions");
+  if (suggestionKey) {
+    const existing = (await store.getAll()).find(
+      (a) => a.documentId === documentId && a.suggestionKey === suggestionKey,
+    );
+    if (existing) {
+      await tx.done;
+      return { action: existing, created: false };
+    }
+  }
+  const action = {
+    id: crypto.randomUUID(),
+    documentId,
+    title: title.trim(),
+    due: due || "",
+    done: false,
+    created: Date.now(),
+    ...(suggestionKey ? { suggestionKey } : {}),
+    ...(quote ? { quote } : {}),
+  };
+  await store.add(action);
   await tx.done;
+  return { action, created: true };
 }
 export async function toggleAction(id) {
   const tx = (await db).transaction("actions", "readwrite");

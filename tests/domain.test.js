@@ -7,14 +7,20 @@ import {
   validateText,
   localClassifier,
   validateProposal,
+  validateFollowUp,
+  parseUnambiguousDate,
+  parseActionDueDate,
+  formatCalendarDate,
   sample,
   MAX_BYTES,
   matchesQuery,
   fingerprint,
 } from "../src/domain.js";
-const base = localClassifier({ text: sample.text, name: "receipt.txt" });
+const receiptText =
+  "Fieldnote Supply receipt\nSYNTHETIC SAMPLE · FN-024\nPaper notebook × 2\nTotal: USD 24.00\nPayment received. Thank you!";
+const base = localClassifier({ text: receiptText, name: "receipt.txt" });
 test("receipt files without a confirmation; total carries its literal source", () => {
-  const d = validateProposal(base, sample.text);
+  const d = validateProposal(base, receiptText);
   assert.equal(d.status, "organized");
   assert.equal(d.category, "Purchases");
   assert.deepEqual(d.facts, [
@@ -46,14 +52,14 @@ test("unsupported facts are dropped; missing category evidence, scans and trunca
         { label: "Warranty expires", value: "2030", quote: "expires 2030" },
       ],
     },
-    sample.text,
+    receiptText,
   );
   assert.equal(v.facts.length, 0);
   assert.equal(v.status, "needs_review");
   for (const v of [
-    validateProposal({ ...base, evidence: "random" }, sample.text),
-    validateProposal(base, sample.text, { partial: true }),
-    validateProposal(base, sample.text, { image: true }),
+    validateProposal({ ...base, evidence: "random" }, receiptText),
+    validateProposal(base, receiptText, { partial: true }),
+    validateProposal(base, receiptText, { image: true }),
   ])
     assert.equal(v.status, "needs_review");
 });
@@ -76,7 +82,7 @@ test("identical bytes have one identity, different same-name documents remain di
   assert.notEqual(await h("abc"), await h("abd"));
 });
 test("literal retrieval matches across title, text, category and corrected fields", () => {
-  const d = { ...base, text: sample.text, tags: ["stationery"] };
+  const d = { ...base, text: receiptText, tags: ["stationery"] };
   assert(matchesQuery(d, "sTaTionEry fieldnote 24.00"));
   assert(!matchesQuery(d, "electricity"));
 });
@@ -104,9 +110,9 @@ test("adapter reports SDK response source rather than guessing from the requeste
     [undefined, "Firebase · source unreported"],
   ]) {
     const model = {
-      initializeDeviceModel: async () => {},
+      initializeDeviceModel: async () => { },
       generateContent: async (parts) => {
-        assert(parts[0].includes(sample.text));
+        assert(parts[0].includes(receiptText));
         return {
           response: {
             inferenceSource: source,
@@ -118,15 +124,15 @@ test("adapter reports SDK response source rather than guessing from the requeste
     const result = await classifierForModel(model, {
       allowCloud: true,
       image: false,
-    })({ text: sample.text });
+    })({ text: receiptText });
     assert.equal(result.mode, mode);
-    assert.equal(validateProposal(result, sample.text).category, "Purchases");
+    assert.equal(validateProposal(result, receiptText).category, "Purchases");
   }
 });
 test("malformed model JSON cannot be accepted as a classification", async () => {
   const model = {
     chromeAdapter: {},
-    initializeDeviceModel: async () => {},
+    initializeDeviceModel: async () => { },
     generateContent: async () => ({
       response: { inferenceSource: "on_device", text: () => "{not-json}" },
     }),
@@ -147,7 +153,7 @@ test("device-only refuses missing chromeAdapter even when initializeDeviceModel 
   const classify = classifierForModel(
     {
       chromeAdapter: undefined,
-      initializeDeviceModel: async () => {},
+      initializeDeviceModel: async () => { },
       generateContent: async () => {
         calls++;
       },
@@ -161,7 +167,7 @@ test("missing SDK adapter property refuses device-only before generation", async
   let calls = 0;
   const classify = classifierForModel(
     {
-      initializeDeviceModel: async () => {},
+      initializeDeviceModel: async () => { },
       generateContent: async () => {
         calls++;
       },
@@ -188,14 +194,14 @@ test("unsupported browser refuses device-only without initializing or generating
   await assert.rejects(classify({ text: sample.text }), /on-device model/);
   assert.equal(calls, 0);
   assert.equal(supportsDeviceAI(null), false);
-  assert.equal(supportsDeviceAI({ availability() {}, create() {} }), true);
+  assert.equal(supportsDeviceAI({ availability() { }, create() { } }), true);
 });
 test("device-only accepts only a reported local source", async () => {
   for (const source of ["in_cloud", undefined, "on_device"]) {
     const classify = classifierForModel(
       {
         chromeAdapter: {},
-        initializeDeviceModel: async () => {},
+        initializeDeviceModel: async () => { },
         generateContent: async () => ({
           response: {
             inferenceSource: source,
@@ -213,4 +219,216 @@ test("device-only accepts only a reported local source", async () => {
     else
       await assert.rejects(classify({ text: sample.text }), /on-device model/);
   }
+});
+test("renewal notice produces a grounded follow-up draft with unambiguous due date", () => {
+  const renewal =
+    "Household membership renewal notice\nAccount #HM-204\nRenew your membership by 12 December 2026.";
+  const raw = localClassifier({ text: renewal, name: "renewal.txt" });
+  const validated = validateProposal(raw, renewal);
+  assert.equal(validated.category, "Home & Living");
+  assert.equal(validated.status, "organized");
+  assert.deepEqual(validated.followUp, {
+    key: "followup:renew your membership by 12 december 2026.",
+    title: "Renew your membership",
+    quote: "Renew your membership by 12 December 2026.",
+    dueText: "12 December 2026",
+    due: "2026-12-12",
+    visualReview: false,
+  });
+});
+test("ambiguous, partial, or competing dates leave follow-up due blank while keeping grounded draft", () => {
+  for (const line of [
+    "Renew your membership by 03/04/2026.",
+    "Renew your membership next Friday.",
+    "Renew your membership by 12 December.",
+    "Renew by 12 December 2026 or 15 December 2026.",
+    "Renew by 2026-02-30.",
+  ]) {
+    assert.equal(parseUnambiguousDate(line), null);
+    const f = validateFollowUp(
+      {
+        title: "Renew your membership",
+        quote: line,
+        dueDate: "2026-12-12",
+        dueText: "12 December 2026",
+      },
+      line,
+    );
+    assert.ok(f);
+    assert.equal(f.due, "");
+    assert.equal(f.quote, line);
+    assert.equal(f.visualReview, false);
+  }
+  const mismatchedDue = validateFollowUp(
+    {
+      title: "Renew your membership",
+      quote: "Renew your membership by 12 December 2026.",
+      dueDate: "2026-12-20",
+    },
+    "Renew your membership by 12 December 2026.",
+  );
+  assert.equal(mismatchedDue.due, "");
+});
+test("unsupported or malformed follow-up is discarded while filing still succeeds", () => {
+  const renewal =
+    "Household membership renewal notice\nRenew your membership by 12 December 2026.";
+  const raw = localClassifier({ text: renewal, name: "renewal.txt" });
+  const nonVerbatim = validateProposal(
+    {
+      ...raw,
+      followUp: {
+        title: "Pay renewal",
+        quote: "Pay before December 12",
+        dueDate: "2026-12-12",
+      },
+    },
+    renewal,
+  );
+  assert.equal(nonVerbatim.status, "organized");
+  assert.equal(nonVerbatim.followUp, null);
+  const malformed = validateProposal(
+    { ...raw, followUp: { title: 42, quote: null } },
+    renewal,
+  );
+  assert.equal(malformed.status, "organized");
+  assert.equal(malformed.followUp, null);
+});
+test("image follow-up is marked for visual review and keeps needs_review status", () => {
+  const validated = validateProposal(
+    {
+      ...base,
+      followUp: {
+        title: "Renew membership",
+        quote: "Renew by 12 December 2026",
+        dueDate: "2026-12-12",
+      },
+    },
+    "",
+    { image: true },
+  );
+  assert.equal(validated.status, "needs_review");
+  assert.deepEqual(validated.followUp, {
+    key: "followup:renew by 12 december 2026",
+    title: "Renew membership",
+    quote: "Renew by 12 December 2026",
+    dueText: "12 December 2026",
+    due: "2026-12-12",
+    visualReview: true,
+  });
+});
+test("classifierForModel preserves optional followUp alongside SDK-reported inferenceSource", async () => {
+  const text =
+    "Household membership renewal notice\nRenew your membership by 12 December 2026.";
+  const modelResponse = {
+    title: "Household membership renewal notice",
+    category: "Home & Living",
+    confidence: "high",
+    evidence: "renewal notice",
+    facts: [],
+    followUp: {
+      title: "Renew membership",
+      quote: "Renew your membership by 12 December 2026.",
+      dueDate: "2026-12-12",
+      dueText: "12 December 2026",
+    },
+  };
+  const model = {
+    chromeAdapter: {},
+    initializeDeviceModel: async () => { },
+    generateContent: async () => ({
+      response: {
+        inferenceSource: "on_device",
+        text: () => JSON.stringify(modelResponse),
+      },
+    }),
+  };
+  const result = await classifierForModel(model, {
+    allowCloud: false,
+    image: false,
+    deviceSupported: true,
+  })({ text });
+  assert.equal(result.mode, "Firebase · on device");
+  const validated = validateProposal(result, text);
+  assert.equal(validated.followUp?.due, "2026-12-12");
+});
+test("respects blank dueDate from model and ignores dates not tied to requested action", () => {
+  const quoteValid = "Renew your membership by 12 December 2026";
+  const respectedBlank = validateFollowUp(
+    {
+      title: "Renew your membership",
+      quote: quoteValid,
+      dueDate: "",
+    },
+    quoteValid,
+  );
+  assert.equal(respectedBlank.due, "");
+  assert.equal(respectedBlank.dueText, "");
+
+  const validNoDot = validateFollowUp(
+    {
+      title: "Renew your membership",
+      quote: quoteValid,
+    },
+    quoteValid,
+  );
+  assert.equal(validNoDot.due, "2026-12-12");
+
+  const issueOnly = "Issued on 1 December 2026. Renew your membership soon.";
+  assert.equal(parseActionDueDate(issueOnly), null);
+  assert.equal(
+    validateFollowUp(
+      {
+        title: "Renew your membership",
+        quote: issueOnly,
+        dueDate: "2026-12-01",
+      },
+      issueOnly,
+    ).due,
+    "",
+  );
+
+  const issuePlusAmbiguous = "Issued on 1 December 2026. Renew by 03/04/2026.";
+  assert.equal(parseActionDueDate(issuePlusAmbiguous), null);
+  assert.equal(
+    validateFollowUp(
+      {
+        title: "Renew your membership",
+        quote: issuePlusAmbiguous,
+        dueDate: "2026-12-01",
+      },
+      issuePlusAmbiguous,
+    ).due,
+    "",
+  );
+  assert.equal(
+    validateFollowUp(
+      {
+        title: "Renew your membership",
+        quote: issuePlusAmbiguous,
+      },
+      issuePlusAmbiguous,
+    ).due,
+    "",
+  );
+  assert.equal(
+    localClassifier({
+      text: "Household membership renewal notice\n" + issuePlusAmbiguous,
+      name: "notice.txt",
+    }).followUp.dueDate,
+    "",
+  );
+});
+test("sample renewal notice files with grounded follow-up and formats calendar dates without day shift", () => {
+  const raw = localClassifier({ text: sample.text, name: "Sample renewal.txt" });
+  const validated = validateProposal(raw, sample.text);
+  assert.equal(validated.category, "Home & Living");
+  assert.equal(validated.status, "organized");
+  assert.equal(validated.followUp?.due, "2026-12-12");
+  const expected = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(2026, 11, 12)));
+  assert.equal(formatCalendarDate("2026-12-12"), expected);
 });

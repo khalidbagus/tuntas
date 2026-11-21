@@ -29,9 +29,9 @@ function pdf(line = "") {
 }
 async function sample(page) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Try sample receipt" }).click();
+  await page.getByRole("button", { name: "Try sample" }).click();
   await expect(
-    page.getByRole("heading", { name: "Fieldnote Supply receipt" }),
+    page.getByRole("heading", { name: "Household membership renewal notice" }),
   ).toBeVisible();
 }
 async function upload(page, name, mime, bytes) {
@@ -46,34 +46,40 @@ test("happy path: sample, search, edit, action completion, source and reload", a
 }) => {
   await sample(page);
   await expect(
-    page.locator("dd").filter({ hasText: "Total: USD 24.00" }),
-  ).toContainText("USD 24.00");
+    page.locator("dd").filter({ hasText: "Total: USD 48.00" }),
+  ).toContainText("USD 48.00");
   await page
     .getByRole("link", { name: "Library", exact: true })
     .first()
     .click();
-  await page.getByLabel("Search documents").fill("notebook 24.00");
-  await page.getByRole("link", { name: /Fieldnote Supply receipt/ }).click();
+  await page.getByLabel("Search documents").fill("family 48.00");
+  await page
+    .getByRole("link", { name: /Household membership renewal notice/ })
+    .click();
   await page.getByRole("button", { name: "Edit details" }).click();
   await page.getByLabel("Primary category").selectOption("Work & Study");
   await page.getByRole("button", { name: "Save changes" }).click();
   await page.getByRole("button", { name: "Add an action" }).click();
-  await page.getByLabel("Action title").fill("Pack the notebook");
+  await page.getByLabel("Action title").fill("Confirm family plan");
   await page.getByRole("button", { name: "Create action" }).click();
   await page
     .getByRole("link", { name: "Actions", exact: true })
     .first()
     .click();
   await page
-    .getByRole("checkbox", { name: "Complete Pack the notebook" })
+    .getByRole("checkbox", { name: "Complete Confirm family plan" })
     .click();
   // The confirmed action moves into Completed and gets a new accessible name.
-  await expect(page.getByRole("checkbox", { name: "Reopen Pack the notebook" })).toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: "Reopen Confirm family plan" }),
+  ).toBeChecked();
   await page.reload();
   await expect(
-    page.getByRole("checkbox", { name: "Reopen Pack the notebook" }),
+    page.getByRole("checkbox", { name: "Reopen Confirm family plan" }),
   ).toBeChecked();
-  await page.getByRole("link", { name: "Fieldnote Supply receipt" }).click();
+  await page
+    .getByRole("link", { name: "Household membership renewal notice" })
+    .click();
   await expect(page.getByText("Work & Study", { exact: true })).toBeVisible();
 });
 test("duplicate opens original; undo returns to Inbox; separate browser profile cannot retrieve it", async ({
@@ -91,7 +97,7 @@ test("duplicate opens original; undo returns to Inbox; separate browser profile 
     .first()
     .click();
   await expect(
-    page.getByRole("link", { name: /Fieldnote Supply receipt/ }),
+    page.getByRole("link", { name: /Household membership renewal notice/ }),
   ).toBeVisible();
   const other = await browser.newContext();
   try {
@@ -366,4 +372,114 @@ test("mobile 390px journey: scan cancel, unreadable image recovery, keyboard-ope
   await expect(
     page.getByRole("img", { name: "Original captured document" }),
   ).toBeVisible();
+});
+test("household renewal follow-up: 390px dock focus, idempotent confirm, duplicate intake, reload, and Actions backlink", async ({
+  page,
+  context,
+}) => {
+  const renewalText =
+    "Household membership renewal notice\nAccount #HM-204\nRenew your membership by 12 December 2026.";
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page.getByLabel("Document text").fill(renewalText);
+  await page.getByRole("button", { name: "Save & organize" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Household membership renewal notice" }),
+  ).toBeVisible();
+  await expect(page.getByText("Filed in Library", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("“Renew your membership by 12 December 2026.”"),
+  ).toBeVisible();
+  await expect(page.getByText("Original document", { exact: true })).toBeVisible();
+
+  const docUrl = page.url();
+  // Open a second tab on the same document before confirming to verify idempotency.
+  const tab2 = await context.newPage();
+  await tab2.goto(docUrl);
+  await tab2.getByRole("button", { name: "Add follow-up" }).click();
+
+  await page.getByRole("button", { name: "Add follow-up" }).click();
+  const titleInput = page.getByLabel("Action title");
+  await expect(titleInput).toBeFocused();
+  await expect(titleInput).toHaveValue("Renew your membership");
+  await expect(page.getByLabel(/Due date/)).toHaveValue("2026-12-12");
+
+  const inputBox = await titleInput.boundingBox();
+  const navBox = await page.locator(".bottom-nav").boundingBox();
+  expect(inputBox).not.toBeNull();
+  expect(navBox).not.toBeNull();
+  expect(inputBox.y).toBeGreaterThanOrEqual(0);
+  expect(inputBox.y + inputBox.height).toBeLessThanOrEqual(navBox.y);
+
+  await titleInput.fill("Renew household membership");
+  await page.getByRole("button", { name: "Create action" }).click();
+  await expect(page.getByText("Saved in Actions")).toBeVisible();
+
+  // Second confirmation of the same suggestion in tab2 creates no duplicate action.
+  await tab2.getByRole("button", { name: "Create action" }).click();
+  await expect(tab2.getByRole("status")).toContainText("already saved in Actions");
+  await tab2.close();
+
+  // Duplicate intake reopens the original and keeps the saved follow-up idempotent.
+  await page.goto("/#/capture");
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page.getByLabel("Document text").fill(renewalText);
+  await page.getByRole("button", { name: "Save & organize" }).click();
+  await expect(page).toHaveURL(docUrl);
+  await expect(page.getByRole("status")).toContainText("Already captured");
+  await expect(page.getByText("Saved in Actions")).toBeVisible();
+
+  await page.getByRole("link", { name: "Open in Actions" }).click();
+  await expect(page.getByRole("heading", { name: "Actions" })).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: "Complete Renew household membership" }),
+  ).toHaveCount(1);
+  await expect(page.getByText(/Due Dec 12, 2026/)).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.getByRole("checkbox", { name: "Complete Renew household membership" }),
+  ).toHaveCount(1);
+  await expect(page.getByText(/Due Dec 12, 2026/)).toBeVisible();
+  await page
+    .getByRole("link", { name: "Household membership renewal notice" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Household membership renewal notice" }),
+  ).toBeVisible();
+  await page.getByText("Original document", { exact: true }).click();
+  await expect(
+    page.locator(".original pre"),
+  ).toContainText("Renew your membership by 12 December 2026.");
+});
+test("ambiguous date follow-up leaves due blank and dismiss creates zero actions", async ({
+  page,
+}) => {
+  const ambiguousText =
+    "Household membership renewal notice\nAccount #HM-205\nRenew your membership by 03/04/2026.";
+  await page.goto("/");
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page.getByLabel("Document text").fill(ambiguousText);
+  await page.getByRole("button", { name: "Save & organize" }).click();
+
+  await expect(
+    page.getByText("“Renew your membership by 03/04/2026.”"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Add follow-up" }).click();
+  await expect(page.getByLabel(/Due date/)).toHaveValue("");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Suggested follow-up" }),
+  ).toHaveCount(0);
+
+  await page.reload();
+  await expect(
+    page.getByRole("region", { name: "Suggested follow-up" }),
+  ).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Actions", exact: true }).first().click();
+  await expect(page.getByText("No actions yet.")).toBeVisible();
 });

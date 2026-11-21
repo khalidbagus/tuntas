@@ -21,7 +21,7 @@ export async function intake({ file, text, sample = false, source }) {
     validateText(text);
     mime = "text/plain";
     blob = new Blob([text], { type: mime });
-    name = sample ? "Sample receipt.txt" : "Pasted text.txt";
+    name = sample ? "Sample renewal.txt" : "Pasted text.txt";
   }
   return stage(blob, { name, mime, size: blob.size, source, sample });
 }
@@ -65,6 +65,7 @@ export async function processDocument(
       proposal: { ...result, mode: proposed.mode },
       reviewed: false,
       autoFiled: result.status === "organized",
+      ...(result.followUp ? { followUpDismissed: false } : {}),
     });
   } catch (e) {
     const message =

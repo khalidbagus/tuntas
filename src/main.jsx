@@ -194,7 +194,7 @@ function App() {
           ? "Filed in Library. You can undo this filing."
           : result.status === "error"
             ? "Original saved. Processing needs attention."
-            : "Original saved. Please check the suggested details.",
+            : "Original saved. Check the suggested details.",
         result.status === "error",
       );
     } catch (e) {
@@ -230,7 +230,7 @@ function App() {
       if (message) say(message);
       return true;
     } catch {
-      say("The change could not be saved. Please try again.", true);
+      say("The change could not be saved. Try again.", true);
       return false;
     }
   }
@@ -251,7 +251,11 @@ function App() {
     </a>
   );
   const captureLink = (
-    <a href="#/capture" className="capture-link">
+    <a
+      href="#/capture"
+      aria-current={page === "capture" ? "page" : undefined}
+      className="capture-link"
+    >
       <Plus size={18} /> Capture
     </a>
   );
@@ -320,21 +324,23 @@ function App() {
               </div>
             )}
           </div>
-          {notice && (
-            <div
-              className={"notice " + (notice.bad ? "warn" : "")}
-              role={notice.bad ? "alert" : "status"}
-            >
-              {notice.bad ? <AlertCircle size={17} /> : <Check size={17} />}
-              <span>{notice.message}</span>
-              <button
-                aria-label="Dismiss message"
-                onClick={() => setNotice(null)}
+          <div aria-live="polite" aria-atomic="true">
+            {notice && (
+              <div
+                className={"notice " + (notice.bad ? "warn" : "")}
+                role={notice.bad ? "alert" : "status"}
               >
-                <X size={16} />
-              </button>
-            </div>
-          )}
+                {notice.bad ? <AlertCircle size={17} /> : <Check size={17} />}
+                <span>{notice.message}</span>
+                <button
+                  aria-label="Dismiss message"
+                  onClick={() => setNotice(null)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+          </div>
           {!loaded ? (
             <p>
               {loadFailed ? "Workspace unavailable." : "Opening workspace…"}
@@ -404,6 +410,7 @@ function App() {
             <Detail
               key={doc.id}
               {...{ doc, modeProps, ready, busy }}
+              actions={data.actions.filter((a) => a.documentId === doc.id)}
               save={(d, fields) =>
                 mutation(() => change(d.id, fields), "Filing saved.")
               }
@@ -420,8 +427,26 @@ function App() {
                 )
               }
               retry={(d) => work({ existing: d })}
-              add={(id, title, due) =>
-                mutation(() => addAction(id, title, due), "Added to Actions.")
+              add={async (docId, actionTitle, due, opts) => {
+                try {
+                  const res = await addAction(docId, actionTitle, due, opts);
+                  await refresh();
+                  say(
+                    res.created
+                      ? "Added to Actions."
+                      : "Follow-up already saved in Actions.",
+                  );
+                  return true;
+                } catch {
+                  say("The change could not be saved. Try again.", true);
+                  return false;
+                }
+              }}
+              dismissFollowUp={(d) =>
+                mutation(
+                  () => change(d.id, { followUpDismissed: true }),
+                  "Follow-up draft dismissed.",
+                )
               }
             />
           ) : (

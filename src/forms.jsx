@@ -15,9 +15,27 @@ import {
 import { Heading, date } from "./ui.jsx";
 import { configured } from "./engine.js";
 import { original } from "./db.js";
-import { categories } from "./domain.js";
+import { categories, formatCalendarDate } from "./domain.js";
 import { supportsDeviceAI } from "./device-ai.js";
-export function Mode({ mode, setMode, consent, setConsent }) {
+export function Mode({
+  mode,
+  setMode,
+  consent,
+  setConsent,
+  payloadKind,
+  file,
+  mime,
+}) {
+  const payloadLabel =
+    mime?.startsWith("image/") ||
+    payloadKind === "camera" ||
+    file?.type?.startsWith("image/")
+      ? "the captured image"
+      : payloadKind === "text" || mime === "text/plain"
+        ? "the pasted text"
+        : mime === "application/pdf" || file?.type === "application/pdf"
+          ? "the extracted PDF text"
+          : "the extracted text or image";
   return (
     <div className="mode">
       <label>
@@ -56,8 +74,8 @@ export function Mode({ mode, setMode, consent, setConsent }) {
               checked={consent}
               onChange={(e) => setConsent(e.target.checked)}
             />
-            For this document, allow Firebase to send the extracted text or
-            image to Google’s cloud model if needed.
+            For this document, allow Firebase to send {payloadLabel} to Google’s
+            cloud model if needed.
           </label>
         </div>
       ) : (
@@ -185,7 +203,13 @@ export function Capture({
             </button>
           </div>
         )}
-        <Mode {...modeProps} />
+        <Mode {...modeProps} payloadKind={kind} file={file} />
+        {modeProps.mode === "hybrid" && !modeProps.consent && (
+          <small className="consent-hint">
+            Confirm cloud permission above to continue, or switch to Local
+            filing rules.
+          </small>
+        )}
         <button
           className="primary"
           disabled={busy || !ready || (kind === "text" ? !text.trim() : !file)}
@@ -199,10 +223,13 @@ export function Capture({
     </>
   );
 }
-function Original({ doc }) {
+function Original({ doc, detailsRef, defaultOpen = false }) {
   const [url, setUrl] = useState(""),
     [source, setSource] = useState(""),
     [broken, setBroken] = useState(false);
+  useEffect(() => {
+    if (defaultOpen && detailsRef?.current) detailsRef.current.open = true;
+  }, [defaultOpen, detailsRef]);
   useEffect(() => {
     let active = true,
       objectURL;
@@ -224,7 +251,11 @@ function Original({ doc }) {
     };
   }, [doc.id]);
   return (
-    <details className="original">
+    <details
+      className="original"
+      ref={detailsRef}
+      open={defaultOpen || undefined}
+    >
       <summary>Original document</summary>
       <small>
         {doc.name} · {doc.mime} · {Math.max(1, Math.ceil(doc.size / 1024))} KB
@@ -258,10 +289,12 @@ function Original({ doc }) {
 }
 export function Detail({
   doc,
+  actions = [],
   save,
   undo,
   retry,
   add,
+  dismissFollowUp,
   modeProps,
   ready,
   busy,
@@ -273,15 +306,64 @@ export function Detail({
     [tags, setTags] = useState(doc.tags.join(", ")),
     [facts, setFacts] = useState(doc.facts),
     [task, setTask] = useState(""),
-    [due, setDue] = useState("");
+    [due, setDue] = useState(""),
+    [suggestionKey, setSuggestionKey] = useState(""),
+    [suggestionQuote, setSuggestionQuote] = useState(""),
+    [savingAction, setSavingAction] = useState(false);
+  const originalRef = useRef(null),
+    actionTitleRef = useRef(null);
   const filed = doc.status === "organized",
-    failed = ["error", "pending", "processing"].includes(doc.status);
+    failed = ["error", "pending", "processing"].includes(doc.status),
+    suggestion = doc.followUp || null,
+    confirmedAction = suggestion
+      ? actions.find((a) => a.suggestionKey === suggestion.key)
+      : null,
+    showSuggestion = Boolean(suggestion && !doc.followUpDismissed);
   useEffect(() => {
     setTitle(doc.title);
     setCategory(doc.category);
     setTags(doc.tags.join(", "));
     setFacts(doc.facts);
+    if (doc.followUpDismissed && suggestionKey) {
+      setAdding(false);
+      setSuggestionKey("");
+      setSuggestionQuote("");
+    }
   }, [doc]);
+  useEffect(() => {
+    if (!adding) return;
+    const frame = requestAnimationFrame(() => {
+      const el = actionTitleRef.current;
+      if (!el) return;
+      el.scrollIntoView({ block: "center" });
+      el.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [adding, suggestionKey]);
+  const openFollowUp = () => {
+    if (!suggestion) return;
+    setTask(suggestion.title);
+    setDue(suggestion.due || "");
+    setSuggestionKey(suggestion.key);
+    setSuggestionQuote(suggestion.quote);
+    setAdding(true);
+  };
+  const openManualAction = () => {
+    if (adding && !suggestionKey) {
+      setAdding(false);
+      return;
+    }
+    setTask("");
+    setDue("");
+    setSuggestionKey("");
+    setSuggestionQuote("");
+    setAdding(true);
+  };
+  const compareWithOriginal = () => {
+    if (!originalRef.current) return;
+    originalRef.current.open = true;
+    originalRef.current.scrollIntoView({ block: "nearest" });
+  };
   return (
     <>
       <a className="back" href={filed ? "#/library" : "#/inbox"}>
@@ -314,7 +396,13 @@ export function Detail({
         )}
         {failed && !busy && (
           <div className="retry">
-            <Mode {...modeProps} />
+            <Mode {...modeProps} mime={doc.mime} />
+            {modeProps.mode === "hybrid" && !modeProps.consent && (
+              <small className="consent-hint">
+                Confirm cloud permission above to retry with AI, or file
+                manually below.
+              </small>
+            )}
             <button
               className="secondary"
               disabled={!ready}
@@ -429,7 +517,11 @@ export function Detail({
           <>
             <div className="section-top">
               <h2>Filing details</h2>
-              <button className="link-button" onClick={() => setEditing(true)}>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => setEditing(true)}
+              >
                 Edit details
               </button>
             </div>
@@ -469,36 +561,137 @@ export function Detail({
             {doc.reviewed && <small>Current filing confirmed by you.</small>}
           </details>
         )}
-        <Original doc={doc} />
+        {showSuggestion && (
+          <section className="followup-card" aria-label="Suggested follow-up">
+            <div className="followup-top">
+              <strong>Suggested follow-up</strong>
+              <div className="button-line">
+                <span
+                  className={
+                    "chip " + (suggestion.visualReview ? "amber" : "blue")
+                  }
+                >
+                  {suggestion.visualReview
+                    ? "Model-read · compare with original"
+                    : "Source excerpt"}
+                </span>
+                {confirmedAction && (
+                  <span className="chip green">Saved in Actions</span>
+                )}
+              </div>
+            </div>
+            <blockquote className="followup-quote">
+              “{suggestion.quote}”
+            </blockquote>
+            <small>
+              {confirmedAction
+                ? `Confirmed: ${confirmedAction.title}${confirmedAction.due ? " · Due " + formatCalendarDate(confirmedAction.due) : ""}`
+                : suggestion.visualReview
+                  ? `Draft: ${suggestion.title}${suggestion.due ? " · Suggested due date: " + formatCalendarDate(suggestion.due) : ""} · Model-read from photo; compare with the original image below before confirming.`
+                  : suggestion.due
+                    ? `Draft: ${suggestion.title} · Suggested due date: ${formatCalendarDate(suggestion.due)}`
+                    : `Draft: ${suggestion.title} · No clear calendar date in the quote — leave blank or enter one when confirming.`}
+            </small>
+            <div className="button-line">
+              {confirmedAction ? (
+                <a className="text-link" href="#/actions">
+                  Open in Actions
+                </a>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={filed && !adding ? "primary" : "secondary"}
+                    disabled={busy || savingAction}
+                    onClick={openFollowUp}
+                  >
+                    <Plus size={17} />
+                    Add follow-up
+                  </button>
+                  {suggestion.visualReview && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={compareWithOriginal}
+                    >
+                      Compare with original
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="link-button"
+                    disabled={busy || savingAction}
+                    onClick={() => {
+                      setAdding(false);
+                      setSuggestionKey("");
+                      setSuggestionQuote("");
+                      dismissFollowUp(doc);
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </>
+              )}
+            </div>
+          </section>
+        )}
+        <Original
+          doc={doc}
+          detailsRef={originalRef}
+          defaultOpen={Boolean(
+            suggestion?.visualReview && !confirmedAction && !doc.followUpDismissed,
+          )}
+        />
         {filed && (
           <div className="button-line">
-            <button className="secondary" onClick={() => setAdding(!adding)}>
+            <button
+              type="button"
+              className="secondary"
+              onClick={openManualAction}
+            >
               <Plus size={17} />
               Add an action
             </button>
             {doc.autoFiled && (
-              <button className="link-button" onClick={() => undo(doc)}>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => undo(doc)}
+              >
                 Undo filing
               </button>
             )}
           </div>
         )}
-        {adding && filed && (
+        {adding && (filed || showSuggestion) && (
           <form
             className="stack"
             onSubmit={async (e) => {
               e.preventDefault();
-              if (await add(doc.id, task, due)) {
-                setAdding(false);
-                setTask("");
-                setDue("");
+              if (savingAction) return;
+              setSavingAction(true);
+              try {
+                if (
+                  await add(doc.id, task, due, {
+                    suggestionKey,
+                    quote: suggestionQuote,
+                  })
+                ) {
+                  setAdding(false);
+                  setTask("");
+                  setDue("");
+                  setSuggestionKey("");
+                  setSuggestionQuote("");
+                }
+              } finally {
+                setSavingAction(false);
               }
             }}
           >
             <label>
               Action title
               <input
-                autoFocus
+                ref={actionTitleRef}
                 required
                 maxLength={140}
                 value={task}
@@ -513,9 +706,26 @@ export function Detail({
                 onChange={(e) => setDue(e.target.value)}
               />
             </label>
-            <button className="primary" disabled={!task.trim()}>
-              Create action
-            </button>
+            <div className="button-line">
+              <button
+                className="primary"
+                disabled={busy || savingAction || !task.trim()}
+              >
+                Create action
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={savingAction}
+                onClick={() => {
+                  setAdding(false);
+                  setSuggestionKey("");
+                  setSuggestionQuote("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
           </form>
         )}
       </section>
