@@ -17,6 +17,7 @@ import {
   Check,
   Folder,
   WifiOff,
+  Globe,
 } from "lucide-react";
 import "@fontsource-variable/space-grotesk";
 import "@fontsource-variable/plus-jakarta-sans";
@@ -32,7 +33,14 @@ import {
   pathFor,
 } from "./ui.jsx";
 import { Capture, Detail } from "./forms.jsx";
-import { snapshot, change, addAction, toggleAction } from "./db.js";
+import {
+  snapshot,
+  change,
+  addAction,
+  toggleAction,
+  ensureDemoSeeded,
+} from "./db.js";
+import { isDemoMode, exitDemoHref, LOCAL_RECEIPT_SOURCE } from "./demo.js";
 import {
   configured,
   localClassifier,
@@ -40,14 +48,24 @@ import {
   processDocument,
 } from "./engine.js";
 import { sample } from "./domain.js";
+import { LangContext } from "./lang.js";
+import {
+  LANGUAGES,
+  loadLang,
+  saveLang,
+  createTranslator,
+  translateRuntimeMessage,
+} from "./i18n.js";
 const items = [
-  ["home", "Home", House],
-  ["inbox", "Inbox", Inbox],
-  ["library", "Library", LibraryBig],
-  ["actions", "Actions", ListChecks],
+  ["home", "navHome", House],
+  ["inbox", "navInbox", Inbox],
+  ["library", "navLibrary", LibraryBig],
+  ["actions", "navActions", ListChecks],
 ];
 const readRoute = () => location.hash.slice(1) || "/home";
 function App() {
+  const [lang, setLang] = useState(() => loadLang());
+  const t = createTranslator(lang);
   const [route, setRoute] = useState(readRoute),
     [data, setData] = useState({ docs: [], actions: [] }),
     [loaded, setLoaded] = useState(false),
@@ -55,6 +73,10 @@ function App() {
     [notice, setNotice] = useState(null),
     [busy, setBusy] = useState(""),
     running = useRef(false);
+  const demoMode = isDemoMode();
+  const hasLocalReceipts = demoMode && data.docs.some(
+    (doc) => doc.source === LOCAL_RECEIPT_SOURCE,
+  );
   const [kind, setKind] = useState("file"),
     [file, setFile] = useState(null),
     [text, setText] = useState(""),
@@ -71,11 +93,15 @@ function App() {
     quickFile = useRef(null),
     quickCamera = useRef(null);
   const [page, id] = route.replace(/^\//, "").split("/"),
-    active =
-      items.find(([p]) => p === page)?.[1] ||
-      { capture: "Capture", document: "Document" }[page] ||
-      "Page";
+    activeItem = items.find(([p]) => p === page),
+    active = activeItem
+      ? t(activeItem[1])
+      : t({ capture: "pageCapture", document: "pageDocument" }[page] || "pageFallback");
   const doc = data.docs.find((d) => d.id === id);
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    saveLang(lang);
+  }, [lang]);
   useEffect(() => {
     setConsent(false);
   }, [kind, file, text, mode]);
@@ -85,7 +111,10 @@ function App() {
   };
   const say = (message, bad = false) => setNotice({ message, bad });
   useEffect(() => {
-    refresh().catch(() => {
+    (async () => {
+      if (demoMode) await ensureDemoSeeded();
+      await refresh();
+    })().catch(() => {
       setLoadFailed(true);
       say(
         "Browser storage is unavailable. Allow site storage and reload.",
@@ -128,7 +157,14 @@ function App() {
   }, [page]);
   useEffect(() => {
     if (!loaded) return;
-    document.title = active + " · Tuntas ✦";
+    document.title =
+      active +
+      (demoMode
+        ? ` · ${t("sampleWorkspace")} · ${t("appTitleSuffix")}`
+        : ` · ${t("appTitleSuffix")}`);
+  }, [loaded, demoMode, active, lang]);
+  useEffect(() => {
+    if (!loaded) return;
     if (searchFocus.current && page === "library") {
       inputRef.current?.focus();
       searchFocus.current = false;
@@ -234,15 +270,15 @@ function App() {
       return false;
     }
   }
-  const nav = (p, label, Icon) => (
+  const nav = (p, labelKey, Icon) => (
     <a
       key={p}
       aria-current={page === p ? "page" : undefined}
       className={page === p ? "nav-item selected" : "nav-item"}
       href={"#/" + p}
     >
-      <Icon size={19} />
-      <span>{label}</span>
+      <Icon size={19} aria-hidden="true" />
+      <span>{t(labelKey)}</span>
       {p === "inbox" && data.docs.some((d) => d.status !== "organized") && (
         <b className="nav-count">
           {data.docs.filter((d) => d.status !== "organized").length}
@@ -256,11 +292,11 @@ function App() {
       aria-current={page === "capture" ? "page" : undefined}
       className="capture-link"
     >
-      <Plus size={18} /> Capture
+      <Plus size={18} aria-hidden="true" /> {t("navCapture")}
     </a>
   );
   return (
-    <>
+    <LangContext.Provider value={lang}>
       <a
         href="#main-content"
         className="skip"
@@ -269,7 +305,7 @@ function App() {
           document.querySelector("main")?.focus();
         }}
       >
-        Skip to content
+        {t("skipToContent")}
       </a>
       <aside className="rail">
         <a className="brand" href="#/home">
@@ -277,17 +313,23 @@ function App() {
           Tuntas<span>✦</span>
         </a>
         <div className="rail-inner">
-          <div className="overline">Workspace</div>
-          <nav aria-label="Main">{items.map((args) => nav(...args))}</nav>
+          <div className="overline">
+            {demoMode ? t("sampleWorkspace") : t("workspace")}
+          </div>
+          <nav aria-label={t("mainNav")}>{items.map((args) => nav(...args))}</nav>
           {captureLink}
         </div>
         <div className="local-profile">
           <span className="soft-icon">
-            <Monitor size={19} />
+            <Monitor size={19} aria-hidden="true" />
           </span>
           <div>
-            <strong>Local workspace</strong>
-            <small>This browser only</small>
+            <strong>
+              {demoMode ? t("sampleWorkspace") : t("localWorkspace")}
+            </strong>
+            <small>
+              {demoMode ? t("sampleDataIsolated") : t("thisBrowserOnly")}
+            </small>
           </div>
         </div>
       </aside>
@@ -298,29 +340,65 @@ function App() {
             Tuntas ✦
           </a>
           <div className="crumb">
-            <PanelLeft size={16} />
-            <span>Workspace</span>
-            <ChevronRight size={13} />
+            <PanelLeft size={16} aria-hidden="true" />
+            <span>{demoMode ? t("sampleWorkspace") : t("workspace")}</span>
+            <ChevronRight size={13} aria-hidden="true" />
             <strong>{active}</strong>
           </div>
-          <button onClick={goSearch} className="search-short">
-            <Search size={16} />
-            <span>Search library</span>
-            <kbd>Ctrl K</kbd>
-          </button>
+          <div className="top-actions">
+            <label className="lang-picker" title={t("languageLabel")}>
+              <Globe size={16} aria-hidden="true" />
+              <span className="sr-only">{t("languageLabel")}</span>
+              <select
+                aria-label={t("languageLabel")}
+                value={lang}
+                onChange={(e) => setLang(e.target.value)}
+              >
+                {LANGUAGES.map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={goSearch}
+              className="search-short"
+              title={t("searchLibrary")}
+            >
+              <Search size={16} aria-hidden="true" />
+              <span>{t("searchLibrary")}</span>
+              <kbd aria-hidden="true">{t("searchShortcutHint")}</kbd>
+            </button>
+          </div>
         </header>
+        {demoMode && (
+          <section className="demo-bar" aria-label={t("sampleWorkspace")}>
+            <div className="demo-bar-copy">
+              <span className="demo-badge">{t("sampleWorkspace")}</span>
+              <span>
+                {hasLocalReceipts
+                  ? t("demoBannerLocalReceipts")
+                  : t("demoBannerDefault")}
+              </span>
+            </div>
+            <a className="demo-exit" href={exitDemoHref()}>
+              {t("exitDemo")}
+            </a>
+          </section>
+        )}
         <main id="main-content" tabIndex="-1">
           {!online && (
             <div className="note">
-              <WifiOff size={15} /> Offline · Your local workspace is still
-              available in this tab.
+              <WifiOff size={15} aria-hidden="true" /> {t("offlineNote")}
             </div>
           )}
           <div aria-live="polite" aria-atomic="true">
             {busy && (
               <div className="progress">
                 <span className="spinner" />
-                {busy}…
+                {translateRuntimeMessage(busy, lang)}…
               </div>
             )}
           </div>
@@ -330,24 +408,31 @@ function App() {
                 className={"notice " + (notice.bad ? "warn" : "")}
                 role={notice.bad ? "alert" : "status"}
               >
-                {notice.bad ? <AlertCircle size={17} /> : <Check size={17} />}
-                <span>{notice.message}</span>
+                {notice.bad ? (
+                  <AlertCircle size={17} aria-hidden="true" />
+                ) : (
+                  <Check size={17} aria-hidden="true" />
+                )}
+                <span>{translateRuntimeMessage(notice.message, lang)}</span>
                 <button
-                  aria-label="Dismiss message"
+                  type="button"
+                  aria-label={t("dismissMessage")}
+                  title={t("dismissMessage")}
                   onClick={() => setNotice(null)}
                 >
-                  <X size={16} />
+                  <X size={16} aria-hidden="true" />
                 </button>
               </div>
             )}
           </div>
           {!loaded ? (
             <p>
-              {loadFailed ? "Workspace unavailable." : "Opening workspace…"}
+              {loadFailed ? t("workspaceUnavailable") : t("openingWorkspace")}
             </p>
           ) : page === "home" ? (
             <Home
               {...data}
+              demo={demoMode}
               busy={!!busy}
               onSample={() =>
                 work({
@@ -450,13 +535,13 @@ function App() {
               }
             />
           ) : (
-            <Empty title="Page not found">
-              <a href="#/home">Back to Home</a>
+            <Empty title={t("pageNotFound")}>
+              <a href="#/home">{t("backToHome")}</a>
             </Empty>
           )}
         </main>
       </div>
-      <nav className="bottom-nav" aria-label="Mobile navigation">
+      <nav className="bottom-nav" aria-label={t("mobileNav")}>
         {items.slice(0, 2).map((args) => nav(...args))}
         {captureLink}
         {items.slice(2).map((args) => nav(...args))}
@@ -482,7 +567,7 @@ function App() {
           e.target.value = "";
         }}
       />
-    </>
+    </LangContext.Provider>
   );
 }
 createRoot(document.getElementById("root")).render(<App />);

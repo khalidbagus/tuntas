@@ -112,13 +112,13 @@ export function parseUnambiguousDate(text) {
   const [[iso, raw]] = [...found.entries()];
   return { iso, raw };
 }
-export function formatCalendarDate(iso) {
+export function formatCalendarDate(iso, locale) {
   if (typeof iso !== "string") return "";
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
   if (!m) return iso;
   const formatted = validIsoDate(Number(m[1]), Number(m[2]), Number(m[3]));
   if (!formatted) return iso;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     year: "numeric",

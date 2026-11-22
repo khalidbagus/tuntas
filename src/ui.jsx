@@ -16,42 +16,59 @@ import {
   Search,
   CircleCheck,
   BookOpen,
+  LibraryBig,
 } from "lucide-react";
+import {
+  demoWorkspaceHref,
+  LOCAL_RECEIPT_SOURCE,
+  REDACTED_RECEIPT_SOURCE,
+} from "./demo.js";
+import { matchesQuery, categories, formatCalendarDate } from "./domain.js";
+import { useLang } from "./lang.js";
+import {
+  createTranslator,
+  formatDate,
+  localeFor,
+  translateCategory,
+} from "./i18n.js";
 export const pathFor = (d) => "/document/" + d.id;
-export const date = (t) =>
-  new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(t));
+export const date = (t, lang) => formatDate(t, lang);
 export const pageLink = (p) => "#" + p;
 export const navTo = (p) => {
   location.hash = p;
 };
 export function DocRow({ d }) {
+  const lang = useLang();
+  const t = createTranslator(lang);
   const Icon = d.mime?.startsWith("image/") ? ImageIcon : FileText;
   return (
     <a className="doc-row" href={pageLink(pathFor(d))}>
       <span className="file-icon">
-        <Icon size={21} />
+        <Icon size={21} aria-hidden="true" />
       </span>
       <span className="grow">
         <strong>{d.title}</strong>
         <small>
-          {d.category} <i>·</i>{" "}
-          {d.sample ? "Synthetic sample" : date(d.created)}
+          {translateCategory(d.category, lang)} <i>·</i>{" "}
+          {d.source === REDACTED_RECEIPT_SOURCE
+            ? t("sourceRedactedSample")
+            : d.source === LOCAL_RECEIPT_SOURCE
+              ? t("sourcePhotoSample")
+              : d.sample
+                ? t("sourceSyntheticSample")
+                : date(d.created, lang)}
         </small>
       </span>
       <span
         className={"chip " + (d.status === "organized" ? "green" : "amber")}
       >
         {d.status === "organized"
-          ? "Filed"
+          ? t("statusFiled")
           : d.status === "error"
-            ? "Needs attention"
-            : "Review"}
+            ? t("statusNeedsAttention")
+            : t("statusReview")}
       </span>
-      <ChevronRight size={16} />
+      <ChevronRight size={16} aria-hidden="true" />
     </a>
   );
 }
@@ -59,7 +76,7 @@ export function Empty({ icon: Icon = Files, title, children }) {
   return (
     <div className="empty">
       <span className="empty-icon">
-        <Icon size={23} />
+        <Icon size={23} aria-hidden="true" />
       </span>
       <div>
         <strong>{title}</strong>
@@ -80,146 +97,206 @@ export function Heading({ kicker, title, description }) {
     </header>
   );
 }
-export function Home({ docs, actions, onSample, onCapture, onDrop, busy }) {
+export function Home({
+  docs,
+  actions,
+  onSample,
+  onCapture,
+  onDrop,
+  busy,
+  demo = false,
+}) {
+  const lang = useLang();
+  const t = createTranslator(lang);
   const waiting = docs.filter((d) => d.status !== "organized").length,
+    filed = docs.filter((d) => d.status === "organized").length,
     open = actions.filter((a) => !a.done).length;
-  return (
-    <>
-      <Heading
-        kicker="Personal workspace"
-        title={
-          <>
-            Life, sorted<span className="accent">.</span>
-          </>
-        }
-        description="A home for your paperwork, from the first scan to the next step."
-      />
-      <div className="hero-grid">
-        <section
-          className="capture-zone"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={onDrop}
-        >
-          <span className="hero-icon">
-            <ScanLine size={26} />
+  const heroSection = (
+    <div className="hero-grid">
+      <section
+        className="capture-zone"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={onDrop}
+      >
+        <span className="hero-icon">
+          <ScanLine size={26} aria-hidden="true" />
+        </span>
+        <div>
+          <div className="overline">{t("documentIntake")}</div>
+          <h2>{t("captureDocumentTitle")}</h2>
+          <p>{t("captureDocumentSubtitle")}</p>
+        </div>
+        <div className="button-line">
+          <button
+            className="primary"
+            disabled={busy}
+            onClick={() => onCapture("file")}
+          >
+            <Upload aria-hidden="true" /> {t("uploadFile")}
+          </button>
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={() => onCapture("camera")}
+          >
+            <Camera aria-hidden="true" /> {t("scan")}
+          </button>
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={() => onCapture("text")}
+          >
+            <ClipboardPaste aria-hidden="true" /> {t("pasteText")}
+          </button>
+        </div>
+        <small>{t("acceptedFilesShort")}</small>
+      </section>
+      <aside className="sample-card">
+        <div className="card-top">
+          <span className="overline">
+            {demo ? t("liveAiOption") : t("sampleNotice")}
           </span>
+          <span className="index-no">
+            {demo ? t("optInIndex") : t("sampleIndex")}
+          </span>
+        </div>
+        <img
+          src="/renewal-icon.png"
+          alt=""
+          className="sample-art"
+          width="128"
+          height="128"
+        />
+        <div className="sample-bottom">
           <div>
-            <div className="overline">Document intake</div>
-            <h2>Capture a document</h2>
-            <p>Drop a file here, or choose how to add it.</p>
+            <strong>
+              {demo ? t("tryFreshInput") : t("householdRenewal")}
+            </strong>
+            <small>
+              {demo ? t("seededNoAi") : t("syntheticLocalRules")}
+            </small>
           </div>
-          <div className="button-line">
-            <button
-              className="primary"
-              disabled={busy}
-              onClick={() => onCapture("file")}
-            >
-              <Upload /> Upload file
-            </button>
-            <button
-              className="secondary"
-              disabled={busy}
-              onClick={() => onCapture("camera")}
-            >
-              <Camera /> Scan
-            </button>
-            <button
-              className="secondary"
-              disabled={busy}
-              onClick={() => onCapture("text")}
-            >
-              <ClipboardPaste /> Paste text
-            </button>
-          </div>
-          <small>
-            PDF, JPEG or PNG <i>·</i> Up to 8 MB
-          </small>
-        </section>
-        <aside className="sample-card">
-          <div className="card-top">
-            <span className="overline">Sample notice</span>
-            <span className="index-no">01 / 01</span>
-          </div>
-          <img
-            src="/renewal-icon.png"
-            alt=""
-            className="sample-art"
-            width="128"
-            height="128"
-          />
-          <div className="sample-bottom">
-            <div>
-              <strong>Household renewal</strong>
-              <small>Synthetic sample · local rules</small>
-            </div>
+          {demo ? (
+            <a href="#/capture" className="secondary sample-btn">
+              {t("openCapture")} <ArrowUpRight size={16} aria-hidden="true" />
+            </a>
+          ) : (
             <button
               type="button"
               disabled={busy}
               className="secondary sample-btn"
               onClick={onSample}
             >
-              Try sample <ArrowUpRight size={16} />
+              {t("trySample")} <ArrowUpRight size={16} aria-hidden="true" />
             </button>
-          </div>
-        </aside>
-      </div>
-      <section className="section">
-        <div className="section-top">
-          <div className="section-title">
-            <span className="section-icon">
-              <Files />
-            </span>
-            <h2>Recent documents</h2>
-          </div>
-          <a href="#/library" className="text-link">
-            View library <ChevronRight size={15} />
-          </a>
-        </div>
-        <div className="list">
-          {docs.length ? (
-            docs.slice(0, 3).map((d) => <DocRow key={d.id} d={d} />)
-          ) : (
-            <Empty title="Your first document goes here.">
-              Capture your own or try the sample notice above.
-            </Empty>
           )}
         </div>
-      </section>
-      <section className="section">
-        <div className="section-top">
-          <h2>Needs attention</h2>
+      </aside>
+    </div>
+  );
+  const recentSection = (
+    <section className="section">
+      <div className="section-top">
+        <div className="section-title">
+          <span className="section-icon">
+            <Files aria-hidden="true" />
+          </span>
+          <h2>{t("recentDocuments")}</h2>
         </div>
-        <div className="mini-grid">
-          {[
-            [
-              Inbox,
-              "Inbox",
-              waiting,
-              waiting ? "Ready for your review" : "Nothing to review",
-              "inbox",
-            ],
-            [
-              CheckCheck,
-              "Actions",
-              open,
-              open ? "Open follow-ups" : "No open follow-ups",
-              "actions",
-            ],
-          ].map(([Icon, title, n, sub, path]) => (
-            <a className="mini" key={path} href={"#/" + path}>
-              <span className="soft-icon">
-                <Icon size={20} />
+        <a href="#/library" className="text-link">
+          {t("viewLibrary")} <ChevronRight size={15} aria-hidden="true" />
+        </a>
+      </div>
+      <div className="list">
+        {docs.length ? (
+          docs.slice(0, 3).map((d) => <DocRow key={d.id} d={d} />)
+        ) : (
+          <Empty title={t("emptyFirstDocTitle")}>
+            {t("emptyFirstDocBody")}
+            {!demo && (
+              <span className="empty-actions">
+                <a className="secondary demo-cta" href={demoWorkspaceHref()}>
+                  {t("exploreDemo")}{" "}
+                  <ArrowUpRight size={16} aria-hidden="true" />
+                </a>
               </span>
-              <span className="grow">
-                <strong>{title}</strong>
-                <small>{sub}</small>
-              </span>
-              <span className="number">{n}</span>
-              <ChevronRight size={15} />
-            </a>
-          ))}
-        </div>
-      </section>
+            )}
+          </Empty>
+        )}
+      </div>
+    </section>
+  );
+  const workspaceSection = (
+    <section className="section" aria-label={t("workspaceOverview")}>
+      <div className="section-top">
+        <h2>{demo ? t("exploreThisWorkspace") : t("workspace")}</h2>
+      </div>
+      <div className="mini-grid">
+        {[
+          [
+            Inbox,
+            t("navInbox"),
+            waiting,
+            waiting ? t("readyForReview") : t("nothingToReview"),
+            "inbox",
+          ],
+          [
+            LibraryBig,
+            t("navLibrary"),
+            filed,
+            filed ? t("filedDocuments") : t("noFiledDocuments"),
+            "library",
+          ],
+          [
+            CheckCheck,
+            t("navActions"),
+            open,
+            open ? t("openFollowUps") : t("noOpenFollowUps"),
+            "actions",
+          ],
+        ].map(([Icon, title, n, sub, path]) => (
+          <a className="mini" key={path} href={"#/" + path}>
+            <span className="soft-icon">
+              <Icon size={20} aria-hidden="true" />
+            </span>
+            <span className="grow">
+              <strong>{title}</strong>
+              <small>{sub}</small>
+            </span>
+            <span className="number">{n}</span>
+            <ChevronRight size={15} aria-hidden="true" />
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+  return (
+    <>
+      <Heading
+        kicker={demo ? t("sampleWorkspace") : t("personalWorkspace")}
+        title={
+          <>
+            {t("homeTitlePrefix")}
+            <span className="accent">.</span>
+          </>
+        }
+        description={t("homeDescription")}
+      />
+      {docs.length > 0 ? (
+        <>
+          {workspaceSection}
+          {recentSection}
+          <section className="section" aria-label={t("documentCaptureSection")}>
+            {heroSection}
+          </section>
+        </>
+      ) : (
+        <>
+          {heroSection}
+          {recentSection}
+          {workspaceSection}
+        </>
+      )}
     </>
   );
 }
@@ -231,6 +308,8 @@ export function Library({
   setCategory,
   inputRef,
 }) {
+  const lang = useLang();
+  const t = createTranslator(lang);
   const visible = docs.filter(
     (d) =>
       d.status === "organized" &&
@@ -240,37 +319,39 @@ export function Library({
   return (
     <>
       <Heading
-        kicker="Document archive"
-        title="Library"
-        description="Find a document by its title, category, or words inside."
+        kicker={t("libraryKicker")}
+        title={t("navLibrary")}
+        description={t("libraryDescription")}
       />
       <div className="filterbar">
         <label className="searchbox">
-          <Search size={19} />
+          <Search size={19} aria-hidden="true" />
           <input
             ref={inputRef}
-            aria-label="Search documents"
-            placeholder="Search documents…"
+            aria-label={t("searchDocumentsLabel")}
+            placeholder={t("searchDocumentsPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
         <select
-          aria-label="Filter by category"
+          aria-label={t("filterByCategoryLabel")}
           value={category}
           onChange={(e) => setCategory(e.target.value)}
         >
-          <option value="">All categories</option>
+          <option value="">{t("allCategories")}</option>
           {categories.map((c) => (
-            <option key={c}>{c}</option>
+            <option key={c} value={c}>
+              {translateCategory(c, lang)}
+            </option>
           ))}
         </select>
       </div>
       <div className="section-top">
-        <h2>{query ? "Search results" : "Filed documents"}</h2>
-        <small>
-          {visible.length} {visible.length === 1 ? "document" : "documents"}
-        </small>
+        <h2>
+          {query ? t("searchResultsHeading") : t("filedDocumentsHeading")}
+        </h2>
+        <small>{t("documentCount", { n: visible.length })}</small>
       </div>
       <div className="list">
         {visible.length ? (
@@ -280,8 +361,8 @@ export function Library({
             icon={FolderOpen}
             title={
               query || category
-                ? "No matching documents"
-                : "Your library is ready."
+                ? t("noMatchingDocuments")
+                : t("libraryReady")
             }
           >
             {query || category ? (
@@ -292,10 +373,10 @@ export function Library({
                   setCategory("");
                 }}
               >
-                Clear search and filters
+                {t("clearSearchFilters")}
               </button>
             ) : (
-              <a href="#/capture">Capture your first document</a>
+              <a href="#/capture">{t("captureFirstDocument")}</a>
             )}
           </Empty>
         )}
@@ -303,22 +384,23 @@ export function Library({
     </>
   );
 }
-import { matchesQuery, categories, formatCalendarDate } from "./domain.js";
 export function InboxPage({ docs }) {
+  const lang = useLang();
+  const t = createTranslator(lang);
   const pending = docs.filter((d) => d.status !== "organized");
   return (
     <>
       <Heading
-        kicker="Review queue"
-        title="Inbox"
-        description="Only documents that need a decision land here."
+        kicker={t("inboxKicker")}
+        title={t("navInbox")}
+        description={t("inboxDescription")}
       />
       <div className="list">
         {pending.length ? (
           pending.map((d) => <DocRow key={d.id} d={d} />)
         ) : (
-          <Empty icon={CircleCheck} title="You’re all caught up.">
-            Confident matches go straight to your Library.
+          <Empty icon={CircleCheck} title={t("inboxCaughtUpTitle")}>
+            {t("inboxCaughtUpBody")}
           </Empty>
         )}
       </div>
@@ -326,53 +408,73 @@ export function InboxPage({ docs }) {
   );
 }
 export function Actions({ docs, actions, onToggle }) {
+  const lang = useLang();
+  const t = createTranslator(lang);
+  const locale = localeFor(lang);
   return (
     <>
       <Heading
-        kicker="Follow-ups"
-        title="Actions"
-        description="Small next steps, each linked to its source document."
+        kicker={t("actionsKicker")}
+        title={t("navActions")}
+        description={t("actionsDescription")}
       />
       {!actions.length ? (
         <div className="list">
-          <Empty icon={CheckCheck} title="No actions yet.">
-            Open a document in your <a href="#/library">Library</a> to add a
-            follow-up.
+          <Empty icon={CheckCheck} title={t("noActionsTitle")}>
+            {t("noActionsPrefix")}{" "}
+            <a href="#/library">{t("navLibrary")}</a> {t("noActionsSuffix")}
           </Empty>
         </div>
       ) : (
         [false, true].map((done) => (
           <section key={String(done)} className="section">
-            <h2>{done ? "Completed" : "Open"}</h2>
+            <h2>{done ? t("completedHeading") : t("openHeading")}</h2>
             <div className="list">
               {actions.filter((a) => a.done === done).length ? (
                 actions
                   .filter((a) => a.done === done)
                   .map((a) => (
                     <div className="action-row" key={a.id}>
-                      <label className="action-toggle"><input
-                        type="checkbox"
-                        id={'action-' + a.id}
-                        aria-label={(done ? "Reopen " : "Complete ") + a.title}
-                        checked={a.done}
-                        onChange={async () => {
-                          if (await onToggle(a.id)) requestAnimationFrame(() => document.getElementById('action-' + a.id)?.focus({ preventScroll: true }));
-                        }}
-                      /></label>
+                      <label className="action-toggle">
+                        <input
+                          type="checkbox"
+                          id={"action-" + a.id}
+                          aria-label={
+                            done
+                              ? t("reopenAction", { title: a.title })
+                              : t("completeAction", { title: a.title })
+                          }
+                          checked={a.done}
+                          onChange={async () => {
+                            if (await onToggle(a.id))
+                              requestAnimationFrame(() =>
+                                document
+                                  .getElementById("action-" + a.id)
+                                  ?.focus({ preventScroll: true }),
+                              );
+                          }}
+                        />
+                      </label>
                       <div>
                         <strong>{a.title}</strong>
                         <small>
-                          {a.due ? "Due " + formatCalendarDate(a.due) + " · " : ""}
+                          {a.due
+                            ? t("duePrefix", {
+                                date: formatCalendarDate(a.due, locale),
+                              }) + " · "
+                            : ""}
                           <a href={"#/document/" + a.documentId}>
                             {docs.find((d) => d.id === a.documentId)?.title ||
-                              "Open source"}
+                              t("openSource")}
                           </a>
                         </small>
                       </div>
                     </div>
                   ))
               ) : (
-                <p className="pad">No {done ? "completed" : "open"} actions.</p>
+                <p className="pad">
+                  {done ? t("noCompletedActions") : t("noOpenActions")}
+                </p>
               )}
             </div>
           </section>

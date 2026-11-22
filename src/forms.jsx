@@ -17,6 +17,18 @@ import { configured } from "./engine.js";
 import { original } from "./db.js";
 import { categories, formatCalendarDate } from "./domain.js";
 import { supportsDeviceAI } from "./device-ai.js";
+import {
+  LOCAL_RECEIPT_SOURCE,
+  REDACTED_RECEIPT_SOURCE,
+} from "./demo.js";
+import { useLang } from "./lang.js";
+import {
+  createTranslator,
+  localeFor,
+  translateCategory,
+  translateMode,
+  translateRuntimeMessage,
+} from "./i18n.js";
 export function Mode({
   mode,
   setMode,
@@ -26,20 +38,22 @@ export function Mode({
   file,
   mime,
 }) {
+  const lang = useLang();
+  const t = createTranslator(lang);
   const payloadLabel =
     mime?.startsWith("image/") ||
     payloadKind === "camera" ||
     file?.type?.startsWith("image/")
-      ? "the captured image"
+      ? t("payloadImage")
       : payloadKind === "text" || mime === "text/plain"
-        ? "the pasted text"
+        ? t("payloadText")
         : mime === "application/pdf" || file?.type === "application/pdf"
-          ? "the extracted PDF text"
-          : "the extracted text or image";
+          ? t("payloadPdf")
+          : t("payloadFallback");
   return (
     <div className="mode">
       <label>
-        Processing method
+        {t("processingMethod")}
         <select
           value={mode}
           onChange={(e) => {
@@ -47,15 +61,13 @@ export function Mode({
             setConsent(false);
           }}
         >
-          <option value="rules">Local filing rules · no AI</option>
+          <option value="rules">{t("modeRules")}</option>
           {configured && (
             <>
               <option value="device" disabled={!supportsDeviceAI()}>
-                Firebase AI · device only
+                {t("modeDevice")}
               </option>
-              <option value="hybrid">
-                Firebase AI · prefer device, allow cloud
-              </option>
+              <option value="hybrid">{t("modeHybrid")}</option>
             </>
           )}
         </select>
@@ -63,10 +75,7 @@ export function Mode({
       {mode === "hybrid" ? (
         <div>
           {!supportsDeviceAI() && (
-            <small>
-              On-device AI is unavailable in this browser. Cloud analysis
-              requires your permission.
-            </small>
+            <small>{t("onDeviceUnavailableHint")}</small>
           )}
           <label className="checkline">
             <input
@@ -74,17 +83,16 @@ export function Mode({
               checked={consent}
               onChange={(e) => setConsent(e.target.checked)}
             />
-            For this document, allow Firebase to send {payloadLabel} to Google’s
-            cloud model if needed.
+            {t("cloudConsentLabel", { payload: payloadLabel })}
           </label>
         </div>
       ) : (
         <small>
           {mode === "device"
-            ? "Requires a supported Chrome device. A model download may be needed. No document is sent to the cloud."
+            ? t("deviceOnlyHint")
             : configured
-              ? "Uses simple text matches in this browser. No AI request."
-              : "Firebase AI is not connected. Text-based filing rules run in this browser."}
+              ? t("rulesConnectedHint")
+              : t("rulesDisconnectedHint")}
         </small>
       )}
     </div>
@@ -102,13 +110,15 @@ export function Capture({
   busy,
   ready,
 }) {
+  const lang = useLang();
+  const t = createTranslator(lang);
   const fileRef = useRef(null);
   return (
     <>
       <Heading
-        kicker="Document intake"
-        title="Capture"
-        description="Bring the original. Tuntas will help with the filing."
+        kicker={t("documentIntake")}
+        title={t("pageCapture")}
+        description={t("captureDescription")}
       />
       <form
         className="form-panel"
@@ -119,9 +129,9 @@ export function Capture({
       >
         <div className="segments">
           {[
-            ["file", Upload, "Upload file"],
-            ["camera", Camera, "Scan"],
-            ["text", ClipboardPaste, "Paste text"],
+            ["file", Upload, t("uploadFile")],
+            ["camera", Camera, t("scan")],
+            ["text", ClipboardPaste, t("pasteText")],
           ].map(([k, I, l]) => (
             <button
               key={k}
@@ -132,18 +142,18 @@ export function Capture({
                 setFile(null);
               }}
             >
-              <I size={17} />
+              <I size={17} aria-hidden="true" />
               {l}
             </button>
           ))}
         </div>
         {kind === "text" ? (
           <label>
-            Document text
+            {t("documentTextLabel")}
             <textarea
               rows="7"
               maxLength={16000}
-              placeholder="Paste a receipt, bill or note…"
+              placeholder={t("documentTextPlaceholder")}
               value={text}
               onChange={(e) => setText(e.target.value)}
               required
@@ -159,23 +169,25 @@ export function Capture({
             }}
           >
             <span className="hero-icon">
-              {kind === "camera" ? <Camera /> : <Upload />}
+              {kind === "camera" ? (
+                <Camera aria-hidden="true" />
+              ) : (
+                <Upload aria-hidden="true" />
+              )}
             </span>
             <strong>
               {file?.name ||
                 (kind === "camera"
-                  ? "Capture a page"
-                  : "Drop your document here")}
+                  ? t("capturePagePrompt")
+                  : t("dropDocumentHere"))}
             </strong>
             <small>
-              {kind === "camera"
-                ? "Use the camera on supported devices, or choose a photo."
-                : "PDF, JPEG or PNG · 8 MB maximum"}
+              {kind === "camera" ? t("cameraSubtext") : t("fileSubtext")}
             </small>
             <input
               key={kind}
               ref={fileRef}
-              aria-label="Select original file"
+              aria-label={t("selectOriginalFile")}
               type="file"
               className="sr-only"
               tabIndex="-1"
@@ -196,34 +208,33 @@ export function Capture({
               onClick={() => fileRef.current?.click()}
             >
               {file
-                ? "Choose another"
+                ? t("chooseAnother")
                 : kind === "camera"
-                  ? "Open camera or photos"
-                  : "Browse files"}
+                  ? t("openCameraOrPhotos")
+                  : t("browseFiles")}
             </button>
           </div>
         )}
         <Mode {...modeProps} payloadKind={kind} file={file} />
         {modeProps.mode === "hybrid" && !modeProps.consent && (
-          <small className="consent-hint">
-            Confirm cloud permission above to continue, or switch to Local
-            filing rules.
-          </small>
+          <small className="consent-hint">{t("consentHintCapture")}</small>
         )}
         <button
           className="primary"
           disabled={busy || !ready || (kind === "text" ? !text.trim() : !file)}
         >
-          <Check size={17} /> Save & organize
+          <Check size={17} aria-hidden="true" /> {t("saveAndOrganize")}
         </button>
         <small className="privacy">
-          <Monitor size={15} /> Original stays in this browser profile.
+          <Monitor size={15} aria-hidden="true" /> {t("privacyFootnote")}
         </small>
       </form>
     </>
   );
 }
 function Original({ doc, detailsRef, defaultOpen = false }) {
+  const lang = useLang();
+  const t = createTranslator(lang);
   const [url, setUrl] = useState(""),
     [source, setSource] = useState(""),
     [broken, setBroken] = useState(false);
@@ -256,7 +267,7 @@ function Original({ doc, detailsRef, defaultOpen = false }) {
       ref={detailsRef}
       open={defaultOpen || undefined}
     >
-      <summary>Original document</summary>
+      <summary>{t("originalDocumentSummary")}</summary>
       <small>
         {doc.name} · {doc.mime} · {Math.max(1, Math.ceil(doc.size / 1024))} KB
       </small>
@@ -265,23 +276,20 @@ function Original({ doc, detailsRef, defaultOpen = false }) {
       ) : doc.mime.startsWith("image/") && url && !broken ? (
         <img
           src={url}
-          alt="Original captured document"
+          alt={t("originalCapturedAlt")}
           onError={() => setBroken(true)}
         />
       ) : doc.mime.startsWith("image/") && broken ? (
-        <p>
-          Image preview is unavailable. Download the original file to inspect
-          it.
-        </p>
+        <p>{t("imagePreviewUnavailable")}</p>
       ) : doc.text ? (
         <pre>{doc.text}</pre>
       ) : (
-        <p>Download the original PDF to inspect it.</p>
+        <p>{t("downloadPdfFallback")}</p>
       )}
       {url && (
         <a className="text-link" download={doc.name} href={url}>
-          <Download size={16} />
-          Download original
+          <Download size={16} aria-hidden="true" />
+          {t("downloadOriginal")}
         </a>
       )}
     </details>
@@ -299,6 +307,9 @@ export function Detail({
   ready,
   busy,
 }) {
+  const lang = useLang();
+  const t = createTranslator(lang);
+  const locale = localeFor(lang);
   const [editing, setEditing] = useState(false),
     [adding, setAdding] = useState(false),
     [title, setTitle] = useState(doc.title),
@@ -367,49 +378,58 @@ export function Detail({
   return (
     <>
       <a className="back" href={filed ? "#/library" : "#/inbox"}>
-        <ArrowLeft size={16} />
-        {filed ? "Library" : "Inbox"}
+        <ArrowLeft size={16} aria-hidden="true" />
+        {filed ? t("navLibrary") : t("navInbox")}
       </a>
       <Heading
-        kicker={doc.sample ? "Synthetic sample · Document" : "Document record"}
+        kicker={
+          doc.source === REDACTED_RECEIPT_SOURCE
+            ? t("kickerRedactedSample")
+            : doc.source === LOCAL_RECEIPT_SOURCE
+              ? t("kickerPhotoSample")
+              : doc.sample
+                ? t("kickerSyntheticSample")
+                : t("kickerDocumentRecord")
+        }
         title={doc.title}
-        description={doc.name + " · Added " + date(doc.created)}
+        description={t("addedDate", {
+          name: doc.name,
+          date: date(doc.created, lang),
+        })}
       />
       <section className="form-panel detail">
         <div className="status-line">
           <span className={"chip " + (filed ? "green" : "amber")}>
             {filed
-              ? "Filed in Library"
+              ? t("statusFiledInLibrary")
               : failed
-                ? "Needs attention"
-                : "Needs review"}
+                ? t("statusNeedsAttention")
+                : t("statusNeedsReview")}
           </span>
-          <small>{doc.mode}</small>
+          <small>{translateMode(doc.mode, lang)}</small>
         </div>
         {!filed && (
           <div className="note">
-            {doc.reason ||
-              (failed
-                ? "Processing was interrupted. Retry or file the original manually."
-                : "Check the details before filing.")}
+            {doc.reason
+              ? translateRuntimeMessage(doc.reason, lang)
+              : failed
+                ? t("interruptedFallback")
+                : t("checkBeforeFiling")}
           </div>
         )}
         {failed && !busy && (
           <div className="retry">
             <Mode {...modeProps} mime={doc.mime} />
             {modeProps.mode === "hybrid" && !modeProps.consent && (
-              <small className="consent-hint">
-                Confirm cloud permission above to retry with AI, or file
-                manually below.
-              </small>
+              <small className="consent-hint">{t("consentHintRetry")}</small>
             )}
             <button
               className="secondary"
               disabled={!ready}
               onClick={() => retry(doc)}
             >
-              <RotateCcw size={16} />
-              Retry processing
+              <RotateCcw size={16} aria-hidden="true" />
+              {t("retryProcessing")}
             </button>
           </div>
         )}
@@ -442,7 +462,7 @@ export function Detail({
             }}
           >
             <label>
-              Document title
+              {t("documentTitleLabel")}
               <input
                 value={title}
                 maxLength={120}
@@ -451,18 +471,20 @@ export function Detail({
               />
             </label>
             <label>
-              Primary category
+              {t("primaryCategoryLabel")}
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               >
                 {categories.map((c) => (
-                  <option key={c}>{c}</option>
+                  <option key={c} value={c}>
+                    {translateCategory(c, lang)}
+                  </option>
                 ))}
               </select>
             </label>
             <label>
-              Tags <small>(optional, comma separated)</small>
+              {t("tagsLabel")} <small>{t("tagsOptional")}</small>
               <input
                 value={tags}
                 maxLength={200}
@@ -485,16 +507,16 @@ export function Detail({
                     )
                   }
                 />
-                <small>Source excerpt: {f.quote}</small>
+                <small>{t("sourceExcerpt", { quote: f.quote })}</small>
               </label>
             ))}
             <div className="button-line">
               <button className="primary" disabled={busy || !title.trim()}>
                 {failed
-                  ? "File without AI"
+                  ? t("fileWithoutAi")
                   : filed
-                    ? "Save changes"
-                    : "Confirm & file"}
+                    ? t("saveChanges")
+                    : t("confirmAndFile")}
               </button>
               {filed && (
                 <button
@@ -508,7 +530,7 @@ export function Detail({
                     setEditing(false);
                   }}
                 >
-                  Cancel
+                  {t("cancel")}
                 </button>
               )}
             </div>
@@ -516,21 +538,21 @@ export function Detail({
         ) : (
           <>
             <div className="section-top">
-              <h2>Filing details</h2>
+              <h2>{t("filingDetails")}</h2>
               <button
                 type="button"
                 className="link-button"
                 onClick={() => setEditing(true)}
               >
-                Edit details
+                {t("editDetails")}
               </button>
             </div>
             <dl>
-              <dt>Category</dt>
-              <dd>{doc.category}</dd>
+              <dt>{t("categoryLabel")}</dt>
+              <dd>{translateCategory(doc.category, lang)}</dd>
               {doc.tags.length > 0 && (
                 <>
-                  <dt>Tags</dt>
+                  <dt>{t("tagsLabel")}</dt>
                   <dd>{doc.tags.join(" · ")}</dd>
                 </>
               )}
@@ -538,11 +560,11 @@ export function Detail({
                 <React.Fragment key={i}>
                   <dt>
                     {f.label}
-                    {f.edited ? " · edited" : ""}
+                    {f.edited ? t("editedSuffix") : ""}
                   </dt>
                   <dd>
                     {f.value}
-                    <small>Source: {f.quote}</small>
+                    <small>{t("sourcePrefix", { quote: f.quote })}</small>
                   </dd>
                 </React.Fragment>
               ))}
@@ -551,20 +573,23 @@ export function Detail({
         )}
         {doc.proposal && (
           <details>
-            <summary>Filing evidence</summary>
+            <summary>{t("filingEvidence")}</summary>
             <p>
-              {doc.proposal.mode} proposed <b>{doc.proposal.category}</b>
+              {t("proposedSentenceStart", {
+                mode: translateMode(doc.proposal.mode, lang),
+              })}
+              <b>{translateCategory(doc.proposal.category, lang)}</b>
               {doc.proposal.evidence
-                ? " based on “" + doc.proposal.evidence + "”."
+                ? t("proposedBasedOn", { evidence: doc.proposal.evidence })
                 : "."}
             </p>
-            {doc.reviewed && <small>Current filing confirmed by you.</small>}
+            {doc.reviewed && <small>{t("currentFilingConfirmed")}</small>}
           </details>
         )}
         {showSuggestion && (
-          <section className="followup-card" aria-label="Suggested follow-up">
+          <section className="followup-card" aria-label={t("suggestedFollowUp")}>
             <div className="followup-top">
-              <strong>Suggested follow-up</strong>
+              <strong>{t("suggestedFollowUp")}</strong>
               <div className="button-line">
                 <span
                   className={
@@ -572,11 +597,11 @@ export function Detail({
                   }
                 >
                   {suggestion.visualReview
-                    ? "Model-read · compare with original"
-                    : "Source excerpt"}
+                    ? t("modelReadChip")
+                    : t("sourceExcerptChip")}
                 </span>
                 {confirmedAction && (
-                  <span className="chip green">Saved in Actions</span>
+                  <span className="chip green">{t("savedInActions")}</span>
                 )}
               </div>
             </div>
@@ -585,17 +610,30 @@ export function Detail({
             </blockquote>
             <small>
               {confirmedAction
-                ? `Confirmed: ${confirmedAction.title}${confirmedAction.due ? " · Due " + formatCalendarDate(confirmedAction.due) : ""}`
+                ? t("confirmedActionSummary", {
+                    title: confirmedAction.title,
+                    due: confirmedAction.due
+                      ? formatCalendarDate(confirmedAction.due, locale)
+                      : "",
+                  })
                 : suggestion.visualReview
-                  ? `Draft: ${suggestion.title}${suggestion.due ? " · Suggested due date: " + formatCalendarDate(suggestion.due) : ""} · Model-read from photo; compare with the original image below before confirming.`
+                  ? t("draftVisualReview", {
+                      title: suggestion.title,
+                      due: suggestion.due
+                        ? formatCalendarDate(suggestion.due, locale)
+                        : "",
+                    })
                   : suggestion.due
-                    ? `Draft: ${suggestion.title} · Suggested due date: ${formatCalendarDate(suggestion.due)}`
-                    : `Draft: ${suggestion.title} · No clear calendar date in the quote — leave blank or enter one when confirming.`}
+                    ? t("draftWithDue", {
+                        title: suggestion.title,
+                        due: formatCalendarDate(suggestion.due, locale),
+                      })
+                    : t("draftWithoutDue", { title: suggestion.title })}
             </small>
             <div className="button-line">
               {confirmedAction ? (
                 <a className="text-link" href="#/actions">
-                  Open in Actions
+                  {t("openInActions")}
                 </a>
               ) : (
                 <>
@@ -605,8 +643,8 @@ export function Detail({
                     disabled={busy || savingAction}
                     onClick={openFollowUp}
                   >
-                    <Plus size={17} />
-                    Add follow-up
+                    <Plus size={17} aria-hidden="true" />
+                    {t("addFollowUp")}
                   </button>
                   {suggestion.visualReview && (
                     <button
@@ -614,7 +652,7 @@ export function Detail({
                       className="secondary"
                       onClick={compareWithOriginal}
                     >
-                      Compare with original
+                      {t("compareWithOriginal")}
                     </button>
                   )}
                   <button
@@ -628,7 +666,7 @@ export function Detail({
                       dismissFollowUp(doc);
                     }}
                   >
-                    Dismiss
+                    {t("dismiss")}
                   </button>
                 </>
               )}
@@ -649,8 +687,8 @@ export function Detail({
               className="secondary"
               onClick={openManualAction}
             >
-              <Plus size={17} />
-              Add an action
+              <Plus size={17} aria-hidden="true" />
+              {t("addAnAction")}
             </button>
             {doc.autoFiled && (
               <button
@@ -658,7 +696,7 @@ export function Detail({
                 className="link-button"
                 onClick={() => undo(doc)}
               >
-                Undo filing
+                {t("undoFiling")}
               </button>
             )}
           </div>
@@ -689,7 +727,7 @@ export function Detail({
             }}
           >
             <label>
-              Action title
+              {t("actionTitleLabel")}
               <input
                 ref={actionTitleRef}
                 required
@@ -699,7 +737,7 @@ export function Detail({
               />
             </label>
             <label>
-              Due date <small>(optional)</small>
+              {t("dueDateLabel")} <small>{t("optionalParen")}</small>
               <input
                 type="date"
                 value={due}
@@ -711,7 +749,7 @@ export function Detail({
                 className="primary"
                 disabled={busy || savingAction || !task.trim()}
               >
-                Create action
+                {t("createAction")}
               </button>
               <button
                 type="button"
@@ -723,7 +761,7 @@ export function Detail({
                   setSuggestionQuote("");
                 }}
               >
-                Cancel
+                {t("cancel")}
               </button>
             </div>
           </form>

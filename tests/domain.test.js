@@ -3,6 +3,26 @@ import assert from "node:assert/strict";
 import { classifierForModel } from "../src/firebase-ai.js";
 import { supportsDeviceAI } from "../src/device-ai.js";
 import {
+  DEMO_SEED_KEY,
+  REDACTED_RECEIPT_SEED_KEY,
+  REDACTED_RECEIPT_SOURCE,
+  REDACTED_RECEIPT_FIXTURES,
+  isDemoMode,
+  demoWorkspaceHref,
+  exitDemoHref,
+  buildDemoSeed,
+} from "../src/demo.js";
+import {
+  DEFAULT_LANG,
+  loadLang,
+  saveLang,
+  localeFor,
+  createTranslator,
+  translateCategory,
+  translateMode,
+  translateRuntimeMessage,
+} from "../src/i18n.js";
+import {
   validateFile,
   validateText,
   localClassifier,
@@ -431,4 +451,164 @@ test("sample renewal notice files with grounded follow-up and formats calendar d
     timeZone: "UTC",
   }).format(new Date(Date.UTC(2026, 11, 12)));
   assert.equal(formatCalendarDate("2026-12-12"), expected);
+});
+test("demo mode query helpers detect demo=1 and preserve non-demo params on exit", () => {
+  assert.equal(isDemoMode("?demo=1"), true);
+  assert.equal(isDemoMode("?foo=bar&demo=1"), true);
+  assert.equal(isDemoMode("?demo=0"), false);
+  assert.equal(isDemoMode(""), false);
+  assert.equal(demoWorkspaceHref("/"), "/?demo=1#/home");
+  assert.equal(exitDemoHref("/", "?demo=1"), "/#/home");
+  assert.equal(exitDemoHref("/", "?foo=1&demo=1"), "/?foo=1#/home");
+});
+test("demo seed builds five synthetic documents, readable originals, and linked actions", async () => {
+  const { docs, originals, actions } = await buildDemoSeed();
+  assert.equal(docs.length, 5);
+  assert.equal(originals.length, 5);
+  assert.equal(actions.length, 3);
+  assert.equal(new Set(docs.map((d) => d.digest)).size, 5);
+
+  const decoder = new TextDecoder();
+  for (const doc of docs) {
+    assert.equal(doc.sample, true);
+    assert.equal(doc.mime, "text/plain");
+    assert.equal(doc.mode, "Synthetic sample · seeded example");
+    assert.ok(doc.text.includes("SYNTHETIC SAMPLE"));
+    assert.ok(doc.text.includes(doc.proposal.evidence));
+    for (const fact of doc.facts) {
+      assert.ok(doc.text.includes(fact.quote));
+      assert.ok(fact.quote.includes(fact.value));
+    }
+    const orig = originals.find((o) => o.id === doc.id);
+    assert.ok(orig);
+    assert.ok(orig.bytes instanceof ArrayBuffer);
+    assert.equal(orig.bytes.byteLength, doc.size);
+    assert.equal(decoder.decode(orig.bytes), doc.text);
+  }
+
+  const renewal = docs.find((d) => d.id === "demo-doc-renewal");
+  assert.equal(renewal.status, "organized");
+  assert.equal(renewal.category, "Home & Living");
+  const renewalAction = actions.find((a) => a.documentId === renewal.id);
+  assert.equal(renewalAction.done, false);
+  assert.equal(renewalAction.due, "2026-12-12");
+
+  const receipt = docs.find((d) => d.id === "demo-doc-receipt");
+  assert.equal(receipt.status, "organized");
+  assert.equal(receipt.category, "Purchases");
+  assert.ok(matchesQuery(receipt, "Fieldnote Supply"));
+  assert.ok(matchesQuery(receipt, "24.00"));
+
+  const utility = docs.find((d) => d.id === "demo-doc-utility");
+  assert.equal(utility.status, "needs_review");
+  assert.ok(utility.text.includes("18 December 2026"));
+  assert.ok(utility.text.includes("28 December 2026"));
+  assert.ok(utility.reason.includes("Two plausible dates"));
+  assert.equal(utility.followUp.due, "");
+  assert.equal(
+    actions.filter((a) => a.documentId === utility.id).length,
+    0,
+  );
+
+  const enrollment = docs.find((d) => d.id === "demo-doc-enrollment");
+  assert.equal(enrollment.status, "organized");
+  const enrollmentAction = actions.find((a) => a.documentId === enrollment.id);
+  assert.equal(enrollmentAction.done, false);
+
+  const maintenance = docs.find((d) => d.id === "demo-doc-maintenance");
+  assert.equal(maintenance.status, "organized");
+  const maintenanceAction = actions.find(
+    (a) => a.documentId === maintenance.id,
+  );
+  assert.equal(maintenanceAction.done, true);
+});
+test("redacted receipt fixtures use separate seed marker, generic titles, and searchable totals", async () => {
+  assert.notEqual(REDACTED_RECEIPT_SEED_KEY, DEMO_SEED_KEY);
+  assert.equal(REDACTED_RECEIPT_FIXTURES.length, 4);
+  assert.deepEqual(
+    REDACTED_RECEIPT_FIXTURES.map((r) => r.total),
+    ["184.000", "14.000", "182.600", "51.542"],
+  );
+  const privateTerms = /haka|dairy\s*queen|gyukichi|ichidon|hangry|devi|rosmita|anisa|mak\s*dura/i;
+  for (const r of REDACTED_RECEIPT_FIXTURES) {
+    assert.match(r.name, /^sample-receipt-[1-4]\.jpg$/);
+    assert.match(r.path, /^\/demo-receipts\/sample-receipt-[1-4]\.jpg$/);
+    assert.equal(privateTerms.test(r.title), false);
+    assert.equal(privateTerms.test(r.name), false);
+  }
+  const built = await buildDemoSeed(
+    REDACTED_RECEIPT_FIXTURES.map((r) => {
+      const quote = `${r.label} : ${r.total}`;
+      return {
+        id: r.id,
+        created: r.created,
+        title: r.title,
+        name: r.name,
+        blob: new Blob([new Uint8Array([255, 216, 255, 224])], {
+          type: "image/jpeg",
+        }),
+        source: REDACTED_RECEIPT_SOURCE,
+        mode: "Redacted receipt sample · fields entered manually",
+        category: "Purchases",
+        status: "organized",
+        autoFiled: false,
+        reviewed: true,
+        reason: "",
+        tags: ["receipt", "photo", "redacted", "IDR"],
+        evidence: quote,
+        text: `${r.title}\n${quote}\nCurrency: IDR`,
+        facts: [{ label: "Total (IDR)", value: r.total, quote }],
+      };
+    }),
+  );
+  assert.equal(built.docs.length, 4);
+  for (const r of REDACTED_RECEIPT_FIXTURES) {
+    const doc = built.docs.find((d) => d.id === r.id);
+    assert.equal(doc.source, REDACTED_RECEIPT_SOURCE);
+    assert.equal(doc.mime, "image/jpeg");
+    assert.ok(matchesQuery(doc, r.total));
+    assert.ok(matchesQuery(doc, r.title.split(" ")[0]));
+  }
+});
+test("language helpers default to English, persist selection, and format calendar dates without day shift", () => {
+  const store = new Map();
+  const storage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+  };
+  assert.equal(loadLang(storage), DEFAULT_LANG);
+  saveLang("id", storage);
+  assert.equal(loadLang(storage), "id");
+  assert.equal(loadLang({ getItem: () => "fr" }), "en");
+  assert.equal(localeFor("en"), "en-US");
+  assert.equal(localeFor("id"), "id-ID");
+
+  const expectedEn = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(2026, 11, 12)));
+  const expectedId = new Intl.DateTimeFormat("id-ID", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(2026, 11, 12)));
+  assert.equal(formatCalendarDate("2026-12-12", localeFor("en")), expectedEn);
+  assert.equal(formatCalendarDate("2026-12-12", localeFor("id")), expectedId);
+
+  const tId = createTranslator("id");
+  assert.equal(tId("documentCount", { n: 1 }), "1 dokumen");
+  assert.equal(tId("documentCount", { n: 4 }), "4 dokumen");
+  assert.equal(translateCategory("Purchases", "id"), "Belanja");
+  assert.equal(translateMode("Local rules", "id"), "Aturan lokal");
+  assert.equal(
+    translateRuntimeMessage("Filing saved.", "id"),
+    "Pengarsipan disimpan.",
+  );
+  assert.equal(
+    translateRuntimeMessage("Custom user text", "id"),
+    "Custom user text",
+  );
 });

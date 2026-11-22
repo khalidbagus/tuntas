@@ -4,7 +4,13 @@ Tuntas is a mobile-responsive web app; select Web/Chrome for judging. No native 
 
 ## Hosted demo
 
-Open [Tuntas](https://tuntas-dev.web.app/) in Chrome. The sample walkthrough below works directly on the hosted site. For live cloud AI, use **Capture → Paste text** with a fresh synthetic renewal, select **Firebase AI · prefer device, allow cloud**, and check the per-document consent box. On a browser without a ready on-device model, inspect the **Firebase · cloud** label and the quoted evidence. Confirm the suggested follow-up, reload Actions, and reopen the source document. The hosted flow was verified signed out with production App Check.
+Open the [populated Tuntas demo](https://tuntas-dev.web.app/?demo=1#/home) in Chrome. A fresh demo workspace starts with one item in Inbox, eight filed documents in Library, and two open actions. Use the header language picker for **English** or **Bahasa Indonesia**.
+
+1. Open **Inbox → Northgrid Water & Power billing notice**. Compare the two dates with the original, then choose **Confirm & file**.
+2. Open **Library** and search `184.000`. Open **Restaurant dinner receipt** and expand **Original document** to see the redacted photograph. Four photographed receipt samples are filed in Library. Their totals were entered for the demo.
+3. Open **Actions**, then follow the household membership link to its source notice. **Exit demo** returns to the separate personal workspace.
+
+For live cloud AI, use **Capture → Paste text** with a fresh synthetic renewal, select **Firebase AI · prefer device, allow cloud**, and check the per-document consent box. On a browser without a ready on-device model, inspect the **Firebase · cloud** label and the quoted evidence. Confirm the follow-up, reload Actions, and reopen its source.
 
 ## Local installation
 

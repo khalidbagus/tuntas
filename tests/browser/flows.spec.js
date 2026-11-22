@@ -483,3 +483,446 @@ test("ambiguous date follow-up leaves due blank and dismiss creates zero actions
   await page.getByRole("link", { name: "Actions", exact: true }).first().click();
   await expect(page.getByText("No actions yet.")).toBeVisible();
 });
+test("demo mode: direct entry, zero external requests, simultaneous tabs + reload idempotency, URL preservation, and Capture", async ({
+  page,
+  context,
+}) => {
+  const external = [];
+  const watchRequests = (p) =>
+    p.on("request", (r) => {
+      if (
+        /^https?:/.test(r.url()) &&
+        !r.url().startsWith("http://127.0.0.1:5174/")
+      ) {
+        external.push(r.url());
+      }
+    });
+  watchRequests(page);
+
+  const tab2 = await context.newPage();
+  watchRequests(tab2);
+  await Promise.all([
+    page.goto("/?demo=1#/home"),
+    tab2.goto("/?demo=1#/home"),
+  ]);
+
+  await expect(page.getByText("Sample workspace").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Exit demo" })).toBeVisible();
+
+  const workspace = page.getByRole("region", { name: "Workspace overview" });
+  await expect(
+    workspace.getByRole("link", { name: /^Inbox/ }),
+  ).toContainText("1");
+  await expect(
+    workspace.getByRole("link", { name: /^Library/ }),
+  ).toContainText("8");
+  await expect(
+    workspace.getByRole("link", { name: /^Actions/ }),
+  ).toContainText("2");
+
+  // Reloading after concurrent multi-tab open keeps seeded counts unchanged.
+  await page.reload();
+  await expect(
+    workspace.getByRole("link", { name: /^Inbox/ }),
+  ).toContainText("1");
+  await expect(
+    workspace.getByRole("link", { name: /^Library/ }),
+  ).toContainText("8");
+  await expect(
+    workspace.getByRole("link", { name: /^Actions/ }),
+  ).toContainText("2");
+
+  // Tab 2 sees the same 8 filed documents in Library with zero duplicates.
+  await tab2.getByRole("link", { name: "Library", exact: true }).first().click();
+  await expect(tab2).toHaveURL(/\?demo=1#\/library$/);
+  await expect(tab2.getByText("8 documents")).toBeVisible();
+  await tab2.close();
+
+  // Demo mode stays active across Inbox, Library, Document Detail, Actions, and Capture.
+  await page.getByRole("link", { name: /^Inbox/ }).first().click();
+  await expect(page).toHaveURL(/\?demo=1#\/inbox$/);
+  await page.getByRole("link", { name: "Library", exact: true }).first().click();
+  await expect(page).toHaveURL(/\?demo=1#\/library$/);
+  await expect(page.getByText("8 documents")).toBeVisible();
+
+  // Verify all four redacted receipt photos are labeled, searchable by total, and open cleanly.
+  for (const [title, total] of [
+    ["Restaurant dinner receipt", "184.000"],
+    ["Ice cream counter receipt", "14.000"],
+    ["Rice bowl takeaway bill", "182.600"],
+    ["Delivery meal receipt", "51.542"],
+  ]) {
+    await page.getByLabel("Search documents").fill(total);
+    await expect(page.getByText("1 document", { exact: true })).toBeVisible();
+    const row = page.getByRole("link", { name: new RegExp(title) });
+    await expect(row).toContainText("Redacted receipt sample");
+    await row.click();
+    await expect(page.getByText("Redacted receipt sample · Document")).toBeVisible();
+    await page.getByText("Original document", { exact: true }).click();
+    const img = page.getByRole("img", { name: "Original captured document" });
+    await expect(img).toBeVisible();
+    await expect
+      .poll(() => img.evaluate((el) => el.complete && el.naturalWidth > 0))
+      .toBeTruthy();
+    await page.getByRole("link", { name: "Library", exact: true }).first().click();
+  }
+  await page.getByLabel("Search documents").fill("");
+  await expect(page.getByText("8 documents")).toBeVisible();
+
+  await page
+    .getByRole("link", { name: /Household membership renewal notice/ })
+    .click();
+  await expect(page).toHaveURL(/\?demo=1#\/document\/demo-doc-renewal$/);
+  await expect(page.getByText("Synthetic sample · Document")).toBeVisible();
+
+  await page.getByRole("link", { name: "Actions", exact: true }).first().click();
+  await expect(page).toHaveURL(/\?demo=1#\/actions$/);
+  await expect(page.getByRole("checkbox")).toHaveCount(3);
+
+  await page.getByRole("link", { name: "Capture", exact: true }).first().click();
+  await expect(page).toHaveURL(/\?demo=1#\/capture$/);
+  await expect(
+    page.getByRole("button", { name: "Save & organize" }),
+  ).toBeVisible();
+
+  expect(external).toEqual([]);
+});
+test("demo mode: phone 390px discoverability, 320px reflow, Inbox review, Library search, Actions backlink + original, and axe WCAG A/AA", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto("/?demo=1#/home");
+  await expect(page.getByRole("link", { name: "Exit demo" })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?demo=1#/home");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+
+  // Inbox, Library, and Actions workspace cards are immediately visible above the fold at phone width.
+  const workspace = page.getByRole("region", { name: "Workspace overview" });
+  const navBox = await page.locator(".bottom-nav").boundingBox();
+  expect(navBox).not.toBeNull();
+  for (const label of [/^Inbox/, /^Library/, /^Actions/]) {
+    const card = workspace.getByRole("link", { name: label });
+    await expect(card).toBeVisible();
+    const box = await card.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.y + box.height).toBeLessThanOrEqual(navBox.y);
+  }
+
+  // Run WCAG A/AA accessibility checks on seeded demo views before mutations.
+  for (const url of [
+    "/?demo=1#/home",
+    "/?demo=1#/inbox",
+    "/?demo=1#/library",
+    "/?demo=1#/actions",
+    "/?demo=1#/capture",
+    "/?demo=1#/document/demo-doc-renewal",
+  ]) {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(
+      violations.map((v) => ({
+        id: v.id,
+        nodes: v.nodes.map((n) => n.target),
+      })),
+    ).toEqual([]);
+  }
+
+  // Review Inbox utility notice with two plausible dates and confirm filing.
+  await page.locator(".bottom-nav").getByRole("link", { name: /^Inbox/ }).click();
+  await page
+    .getByRole("link", { name: /Northgrid Water & Power billing notice/ })
+    .click();
+  await expect(page.getByText(/Two plausible dates appear/)).toBeVisible();
+  await page.getByText("Original document", { exact: true }).click();
+  await expect(page.locator(".original pre")).toContainText("18 December 2026");
+  await expect(page.locator(".original pre")).toContainText("28 December 2026");
+  await page.getByRole("button", { name: "Confirm & file" }).click();
+  await expect(page.getByText("Filed in Library", { exact: true })).toBeVisible();
+
+  await page.locator(".bottom-nav").getByRole("link", { name: /^Inbox/ }).click();
+  await expect(page.getByText("You’re all caught up.")).toBeVisible();
+
+  // Search Library by merchant and amount, then inspect original.
+  await page.locator(".bottom-nav").getByRole("link", { name: "Library" }).click();
+  await page.getByLabel("Search documents").fill("Fieldnote");
+  await expect(
+    page.getByRole("link", { name: /Fieldnote Supply notebook receipt/ }),
+  ).toBeVisible();
+  await page.getByLabel("Search documents").fill("24.00");
+  await page
+    .getByRole("link", { name: /Fieldnote Supply notebook receipt/ })
+    .click();
+  await page.getByText("Original document", { exact: true }).click();
+  await expect(page.locator(".original pre")).toContainText("USD 24.00");
+
+  // Inspect Actions (open + completed) and open original from Actions.
+  await page.locator(".bottom-nav").getByRole("link", { name: "Actions" }).click();
+  await expect(
+    page.getByRole("checkbox", { name: "Complete Renew household membership" }),
+  ).toBeVisible();
+  await expect(page.getByText(/Due Dec 12, 2026/)).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", {
+      name: "Complete Submit signed course outline and ID verification",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", {
+      name: "Reopen Confirm hallway access window with building desk",
+    }),
+  ).toBeChecked();
+
+  await page
+    .getByRole("link", { name: "Household membership renewal notice" })
+    .click();
+  await page.getByText("Original document", { exact: true }).click();
+  await expect(page.locator(".original pre")).toContainText(
+    "Renew your membership by 12 December 2026.",
+  );
+});
+test("Explore demo from empty Home and keep existing personal workspace isolated", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByText("Your first document goes here.")).toBeVisible();
+  await page.getByRole("link", { name: "Explore demo" }).click();
+  await expect(page).toHaveURL(/\?demo=1#\/home$/);
+  await expect(page.getByText("Sample workspace").first()).toBeVisible();
+
+  await page.getByRole("link", { name: "Exit demo" }).click();
+  await expect(page).toHaveURL(/\/#\/home$/);
+  await expect(page.getByText("Your first document goes here.")).toBeVisible();
+
+  // Save a personal document in normal mode.
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page
+    .getByLabel("Document text")
+    .fill("Personal garage lease\nMonthly parking lease");
+  await page.getByRole("button", { name: "Save & organize" }).click();
+  await expect(page.getByText("Filed in Library", { exact: true })).toBeVisible();
+
+  // Enter demo mode, modify a demo record, then exit back to personal workspace.
+  await page.goto("/?demo=1#/inbox");
+  await page
+    .getByRole("link", { name: /Northgrid Water & Power billing notice/ })
+    .click();
+  await page.getByRole("button", { name: "Confirm & file" }).click();
+  await expect(page.getByText("Filed in Library", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Exit demo" }).click();
+  await expect(page).toHaveURL(/\/#\/home$/);
+  await page.getByRole("link", { name: "Library", exact: true }).first().click();
+  await expect(page.getByText("1 document", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Personal garage lease/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Fieldnote Supply notebook receipt/ }),
+  ).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByText("1 document", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Personal garage lease/ }),
+  ).toBeVisible();
+});
+test("demo mode: already-seeded demo receives redacted receipts without losing edits", async ({
+  page,
+}) => {
+  // Simulate an existing visitor who already has demo-seed-v1 and an edited title, before demo-redacted-receipts-v1 existed.
+  await page.goto("/");
+  await page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const req = indexedDB.open("tuntas-demo-workspace-v1", 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          const docs = db.createObjectStore("documents", { keyPath: "id" });
+          docs.createIndex("digest", "digest", { unique: true });
+          db.createObjectStore("originals");
+          db.createObjectStore("actions", { keyPath: "id" });
+          db.createObjectStore("meta", { keyPath: "key" });
+        };
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(["documents", "meta"], "readwrite");
+          tx.objectStore("meta").put({
+            key: "demo-seed-v1",
+            seededAt: 1,
+            version: 1,
+          });
+          tx.objectStore("documents").put({
+            id: "demo-doc-renewal",
+            digest: "custom-edited-digest",
+            created: 1000,
+            status: "organized",
+            title: "Custom edited renewal",
+            name: "custom.txt",
+            mime: "text/plain",
+            size: 21,
+            source: "Demo sample",
+            sample: true,
+            category: "Home & Living",
+            tags: ["edited"],
+            facts: [],
+            text: "Custom edited renewal",
+            mode: "Manual edit",
+            reason: "",
+            reviewed: true,
+            autoFiled: false,
+          });
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+
+  await page.goto("/?demo=1#/library");
+  await expect(page.getByText("5 documents")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Custom edited renewal/ }),
+  ).toBeVisible();
+  for (const title of [
+    "Restaurant dinner receipt",
+    "Ice cream counter receipt",
+    "Rice bowl takeaway bill",
+    "Delivery meal receipt",
+  ]) {
+    await expect(
+      page.getByRole("link", { name: new RegExp(title) }),
+    ).toBeVisible();
+  }
+
+  await page.reload();
+  await expect(page.getByText("5 documents")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Custom edited renewal/ }),
+  ).toBeVisible();
+});
+test("language picker: EN -> Bahasa Indonesia -> EN on same receipt, persistence, keyboard operation, 320px/390px, and axe WCAG A/AA", async ({
+  page,
+}) => {
+  await page.goto("/?demo=1#/document/demo-doc-redacted-receipt-1");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  const picker = page.getByLabel("Language");
+  await expect(picker).toHaveValue("en");
+  await expect(
+    page.getByRole("heading", { name: "Restaurant dinner receipt" }),
+  ).toBeVisible();
+
+  // Switch English -> Bahasa Indonesia on the same receipt.
+  await picker.selectOption("id");
+  await expect(page).toHaveURL(/\?demo=1#\/document\/demo-doc-redacted-receipt-1$/);
+  await expect(page.locator("html")).toHaveAttribute("lang", "id");
+  await expect(
+    page.getByRole("heading", { name: "Filing details" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Detail pengarsipan" }),
+  ).toBeVisible();
+  await expect(
+    page.locator("dd").getByText("Belanja", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Sumber: Grand Total : 184.000")).toBeVisible();
+
+  // Receipt image & original text stay in their original language/bytes.
+  await page.getByText("Dokumen asli", { exact: true }).click();
+  const img = page.getByRole("img", { name: "Dokumen asli yang ditangkap" });
+  await expect(img).toBeVisible();
+  await expect
+    .poll(() => img.evaluate((el) => el.complete && el.naturalWidth > 0))
+    .toBeTruthy();
+
+  // Persist Bahasa Indonesia across reload and inspect formatted Indonesian calendar date in Actions & Capture.
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "id");
+  await expect(page.getByLabel("Bahasa")).toHaveValue("id");
+
+  await page.getByRole("link", { name: "Tindakan", exact: true }).first().click();
+  await expect(page).toHaveURL(/\?demo=1#\/actions$/);
+  const expectedIdDate = await page.evaluate(() =>
+    new Intl.DateTimeFormat("id-ID", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(Date.UTC(2026, 11, 12))),
+  );
+  await expect(page.getByText(`Tenggat ${expectedIdDate}`)).toBeVisible();
+
+  // Check WCAG A/AA in Bahasa Indonesia across key demo views.
+  for (const url of [
+    "/?demo=1#/home",
+    "/?demo=1#/library",
+    "/?demo=1#/actions",
+    "/?demo=1#/capture",
+    "/?demo=1#/document/demo-doc-redacted-receipt-1",
+  ]) {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(
+      violations.map((v) => ({
+        id: v.id,
+        nodes: v.nodes.map((n) => n.target),
+      })),
+    ).toEqual([]);
+  }
+
+  // Verify no clipping or horizontal overflow at 320px and 390px in Bahasa Indonesia and English.
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const url of [
+      "/?demo=1#/home",
+      "/?demo=1#/document/demo-doc-redacted-receipt-1",
+    ]) {
+      await page.goto(url);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBeTruthy();
+      const pickerBox = await page.locator(".lang-picker").boundingBox();
+      expect(pickerBox).not.toBeNull();
+      expect(pickerBox.x + pickerBox.width).toBeLessThanOrEqual(width);
+    }
+  }
+
+  // Switch back Bahasa Indonesia -> English via keyboard on the same receipt.
+  await page.setViewportSize({ width: 1280, height: 850 });
+  await page.goto("/?demo=1#/document/demo-doc-redacted-receipt-1");
+  const langSelect = page.locator(".lang-picker select");
+  await expect(langSelect).toHaveAttribute("aria-label", "Bahasa");
+  await langSelect.focus();
+  await expect(langSelect).toBeFocused();
+  await langSelect.press("ArrowUp");
+  if ((await langSelect.inputValue()) !== "en") {
+    await langSelect.selectOption("en");
+  }
+  await expect(langSelect).toHaveAttribute("aria-label", "Language");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(
+    page.getByRole("heading", { name: "Filing details" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\?demo=1#\/document\/demo-doc-redacted-receipt-1$/);
+});

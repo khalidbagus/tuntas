@@ -1,7 +1,7 @@
 # Tuntas ✦
 Capture a document once. Find it later by what it contains, correct uncertain filing, or attach a follow-up. This is a local-first web MVP based on the actual Tuntas Stitch exports. No Firebase account is required for the browser-only workflow.
 
-[Open the live demo](https://tuntas-dev.web.app/) · [Judging walkthrough](docs/submission/JUDGING.md)
+[Open the live demo](https://tuntas-dev.web.app/?demo=1#/home) · [Judging walkthrough](docs/submission/JUDGING.md)
 
 ## Run locally
 Use Node 22.13+ and npm. From this folder:
@@ -12,6 +12,11 @@ npm run dev
 Open the loopback URL printed by Vite. Use the **same hostname, port and browser profile** on later visits. A separate profile starts empty. For the production bundle use `npm run build`, then `npm run preview`. Public deployment is not part of this setup.
 
 ## Try it
+
+The live demo opens a populated sample workspace with an Inbox review, searchable receipts, and linked Actions. Four redacted receipt photographs are available under **Original document** in Library. Switch between **English** and **Bahasa Indonesia** in the header. Use **Exit demo** to open the separate personal workspace.
+
+For a quick tour from the personal workspace:
+
 1. On Home choose **Try sample** on the synthetic Household renewal card. It uses Local rules and shows a source-linked follow-up.
 2. Choose **Add follow-up**, check the excerpt and due date, then choose **Create action**. Reload Actions and follow the document link to open the original.
 3. In Library, search for `household renewal` to find the document again. Use **Undo filing** to move it to Inbox. Trying the same sample again opens the existing document.
