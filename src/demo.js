@@ -6,7 +6,10 @@ export const DEMO_SEED_KEY = "demo-seed-v1";
 export const REDACTED_RECEIPT_SEED_KEY = "demo-redacted-receipts-v1";
 export const REDACTED_RECEIPT_SOURCE = "Redacted receipt sample";
 export const LOCAL_RECEIPT_SEED_KEY = "demo-local-receipts-v1";
+export const LOCAL_RECEIPT_EXPANSION_SEED_KEY = "demo-local-receipts-5-8-v1";
 export const LOCAL_RECEIPT_SOURCE = "Photographed receipt";
+export const DEMO_WORKFLOW_SEED_KEY = "demo-connected-workflow-v1";
+export const DEMO_RENEWAL_GROUP_ID = "demo-group-household-renewal";
 
 export function isDemoMode(search = globalThis.location?.search ?? "") {
   return new URLSearchParams(search).get("demo") === "1";
@@ -14,8 +17,18 @@ export function isDemoMode(search = globalThis.location?.search ?? "") {
 
 export function demoWorkspaceHref(
   pathname = globalThis.location?.pathname ?? "/",
+  fromRoute = "",
 ) {
-  return `${pathname}?demo=1#/home`;
+  const params = new URLSearchParams();
+  params.set("demo", "1");
+  if (
+    fromRoute &&
+    fromRoute !== "/home" &&
+    /^\/[a-z0-9/_-]*$/i.test(fromRoute)
+  ) {
+    params.set("from", fromRoute);
+  }
+  return `${pathname}?${params.toString()}#/home`;
 }
 
 export function exitDemoHref(
@@ -23,10 +36,13 @@ export function exitDemoHref(
   search = globalThis.location?.search ?? "",
 ) {
   const params = new URLSearchParams(search);
+  const rawFrom = params.get("from") || "";
+  const targetRoute = /^\/[a-z0-9/_-]*$/i.test(rawFrom) ? rawFrom : "/home";
   params.delete("demo");
   params.delete("receipts");
+  params.delete("from");
   const qs = params.toString();
-  return `${pathname}${qs ? `?${qs}` : ""}#/home`;
+  return `${pathname}${qs ? `?${qs}` : ""}#${targetRoute}`;
 }
 
 export const DEMO_FIXTURES = [
@@ -61,10 +77,11 @@ export const DEMO_FIXTURES = [
     },
     action: {
       id: "demo-action-renewal",
-      title: "Renew household membership",
+      title: "Submit renewal",
       due: "2026-12-12",
       done: false,
       created: Date.UTC(2026, 10, 22, 9, 5),
+      groupId: DEMO_RENEWAL_GROUP_ID,
     },
   },
   {
@@ -291,7 +308,7 @@ export async function loadRedactedReceiptFixtures() {
   );
 }
 
-export async function loadLocalReceiptFixtures() {
+export async function loadLocalReceiptFixtures(numbers) {
   if (
     !import.meta.env?.DEV ||
     !["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) ||
@@ -304,9 +321,11 @@ export async function loadLocalReceiptFixtures() {
   const manifest = await fetch(base + "manifest.json");
   if (manifest.status === 404) return [];
   if (!manifest.ok) throw Error("Could not load the local receipt manifest.");
-  return Promise.all((await manifest.json()).map(async (receipt) => {
+  const receipts = (await manifest.json()).filter((receipt) =>
+    numbers.includes(receipt.number),
+  );
+  return Promise.all(receipts.map(async (receipt) => {
     const { number, title, label, total } = receipt;
-    if (![1, 2, 3, 4].includes(number)) throw Error("Unknown receipt fixture.");
     const name = `receipt_${number}.jpeg`;
     const response = await fetch(base + name);
     if (!response.ok) throw Error(`Could not load ${name}.`);
@@ -392,6 +411,7 @@ export async function buildDemoSeed(fixtures = DEMO_FIXTURES) {
         due: fixture.action.due,
         done: fixture.action.done,
         created: fixture.action.created,
+        ...(fixture.action.groupId ? { groupId: fixture.action.groupId } : {}),
         suggestionKey: fixture.followUp.key,
         quote: fixture.followUp.quote,
       });
@@ -399,4 +419,65 @@ export async function buildDemoSeed(fixtures = DEMO_FIXTURES) {
   }
 
   return { docs, originals, actions };
+}
+
+export function buildDemoWorkflowSeed() {
+  const groupCreated = Date.UTC(2026, 10, 22, 9, 0);
+  return {
+    groups: [
+      {
+        id: DEMO_RENEWAL_GROUP_ID,
+        title: "Household membership renewal",
+        created: groupCreated,
+        updated: groupCreated,
+      },
+    ],
+    actions: [
+      {
+        id: "demo-action-renewal-address",
+        documentId: "demo-doc-utility",
+        title: "Prepare address proof",
+        due: "2026-11-26",
+        done: false,
+        created: Date.UTC(2026, 10, 22, 9, 2),
+        groupId: DEMO_RENEWAL_GROUP_ID,
+        quote: "Account: Northgrid Residential 418",
+      },
+      {
+        id: "demo-action-renewal",
+        documentId: "demo-doc-renewal",
+        title: "Submit renewal",
+        due: "2026-12-12",
+        done: false,
+        created: Date.UTC(2026, 10, 22, 9, 5),
+        groupId: DEMO_RENEWAL_GROUP_ID,
+        suggestionKey: "followup:renew your membership by 12 december 2026.",
+        quote: "Renew your membership by 12 December 2026.",
+      },
+      {
+        id: "demo-action-renewal-verify",
+        documentId: "demo-doc-renewal",
+        title: "Verify confirmation",
+        due: "",
+        done: false,
+        created: Date.UTC(2026, 10, 22, 9, 8),
+        groupId: DEMO_RENEWAL_GROUP_ID,
+        quote: "Annual family plan",
+      },
+    ],
+    dependencies: [
+      {
+        id: "demo-action-renewal-address->demo-action-renewal",
+        prerequisiteActionId: "demo-action-renewal-address",
+        dependentActionId: "demo-action-renewal",
+        created: Date.UTC(2026, 10, 22, 9, 9),
+      },
+      {
+        id: "demo-action-renewal->demo-action-renewal-verify",
+        prerequisiteActionId: "demo-action-renewal",
+        dependentActionId: "demo-action-renewal-verify",
+        created: Date.UTC(2026, 10, 22, 9, 10),
+      },
+    ],
+  };
 }

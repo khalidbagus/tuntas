@@ -1,0 +1,366 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Tuntas stores per-user sync state and lightweight progress records
+// strictly scoped under /users/{uid}/... (path-based ownership; no
+// in-document uid field and no parent /users/{uid} document required).
+// Local-only sensitive document content (e.g., text, evidence, facts,
+// proposal, followUp, quote, bytes, reason, name, mime, size, digest,
+// suggestionKey) MUST remain in browser IndexedDB and is rejected on write.
+// Hard deletes are disabled across all collections; deletions use
+// soft-delete tombstones (deleted == true).
+//
+// Collection: users/{uid}/settings/{settingId}
+// Document ID: 'sync'
+// Fields:
+//   - enabled: bool (required) - whether cloud progress sync is enabled
+//   - updatedAt: int | float >= 0 (required) - epoch ms timestamp
+//
+// Collection: users/{uid}/documents/{docId}
+// Document ID: document id (matches data.id)
+// Fields:
+//   - id: string (required, immutable == docId)
+//   - title: string (required, max 120 chars)
+//   - category: string enum (required: Money & Bills | Home & Living | Work & Study | Purchases | Personal Records | Other)
+//   - tags: list<string> (required, max 10 items, each string max 200 chars)
+//   - status: string enum (required: pending | processing | needs_review | organized | error)
+//   - created: int | float >= 0 (required)
+//   - updatedAt: int | float >= 0 (required)
+//   - deleted: bool (required; permanent tombstone once true)
+//   - deletedAt: null | int | float >= 0 (required)
+//
+// Collection: users/{uid}/actions/{actionId}
+// Document ID: action id (matches data.id)
+// Fields:
+//   - id: string (required, immutable == actionId)
+//   - documentId: string (required, max 120 chars)
+//   - title: string (required, max 140 chars)
+//   - due: string (required, max 10 chars, YYYY-MM-DD or '')
+//   - done: bool (required)
+//   - groupId: string (required, max 80 chars)
+//   - created: int | float >= 0 (required)
+//   - updatedAt: int | float >= 0 (required)
+//   - deleted: bool (required; permanent tombstone once true)
+//   - deletedAt: null | int | float >= 0 (required)
+//
+// Collection: users/{uid}/actionGroups/{groupId}
+// Document ID: group id (matches data.id)
+// Fields:
+//   - id: string (required, immutable == groupId)
+//   - title: string (required, max 80 chars)
+//   - created: int | float >= 0 (required)
+//   - updated: int | float >= 0 (required)
+//   - updatedAt: int | float >= 0 (required)
+//   - deleted: bool (required; permanent tombstone once true)
+//   - deletedAt: null | int | float >= 0 (required)
+//
+// Collection: users/{uid}/actionDependencies/{depId}
+// Document ID: dependency id (matches data.id)
+// Fields:
+//   - id: string (required, immutable == depId)
+//   - prerequisiteActionId: string (required, 1..120 chars, != dependentActionId)
+//   - dependentActionId: string (required, 1..120 chars, != prerequisiteActionId)
+//   - created: int | float >= 0 (required)
+//   - updatedAt: int | float >= 0 (required)
+//   - deleted: bool (required; re-link allowed only when next.updatedAt > existing.updatedAt)
+//   - deletedAt: null | int | float >= 0 (required)
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the request comes from an authenticated user.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated caller owns the /users/{uid} namespace.
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Enforce exact allowlisted fields and verify all required fields exist.
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    // Validate finite non-negative epoch millisecond timestamps.
+    function isValidTimestampMs(value) {
+      return (value is int || value is float) && value >= 0;
+    }
+
+    function isNullableTimestampMs(value) {
+      return value == null || isValidTimestampMs(value);
+    }
+
+    // Deep-validate bounded tag strings inside a list of at most 10 items.
+    function isValidTag(tag) {
+      return tag is string && tag.size() <= 200;
+    }
+
+    function isValidTagList(tags) {
+      return tags is list &&
+        tags.size() <= 10 &&
+        (tags.size() < 1 || isValidTag(tags[0])) &&
+        (tags.size() < 2 || isValidTag(tags[1])) &&
+        (tags.size() < 3 || isValidTag(tags[2])) &&
+        (tags.size() < 4 || isValidTag(tags[3])) &&
+        (tags.size() < 5 || isValidTag(tags[4])) &&
+        (tags.size() < 6 || isValidTag(tags[5])) &&
+        (tags.size() < 7 || isValidTag(tags[6])) &&
+        (tags.size() < 8 || isValidTag(tags[7])) &&
+        (tags.size() < 9 || isValidTag(tags[8])) &&
+        (tags.size() < 10 || isValidTag(tags[9]));
+    }
+
+    // Enforce permanent tombstones so offline devices cannot resurrect deleted items.
+    function isTombstonePreserved(existing, next) {
+      return existing.deleted == false || next.deleted == true;
+    }
+
+    // Allow re-linking a deleted dependency only when the incoming write is strictly newer.
+    function canUpdateDependency(existing, next) {
+      return existing.deleted == false ||
+        next.deleted == true ||
+        (next.deleted == false && next.updatedAt > existing.updatedAt);
+    }
+
+    // ===============================================================
+    // Domain Validators (Applied on both create and update)
+    // ===============================================================
+
+    function isValidSyncSettings(data) {
+      return hasOnlyAllowedFields(data, ['enabled', 'updatedAt']) &&
+        hasRequiredFields(data, ['enabled', 'updatedAt']) &&
+        data.enabled is bool &&
+        isValidTimestampMs(data.updatedAt);
+    }
+
+    function isValidDocument(data, docId) {
+      return hasOnlyAllowedFields(data, [
+          'id',
+          'title',
+          'category',
+          'tags',
+          'status',
+          'created',
+          'updatedAt',
+          'deleted',
+          'deletedAt'
+        ]) &&
+        hasRequiredFields(data, [
+          'id',
+          'title',
+          'category',
+          'tags',
+          'status',
+          'created',
+          'updatedAt',
+          'deleted',
+          'deletedAt'
+        ]) &&
+        data.id is string &&
+        data.id == docId &&
+        data.title is string &&
+        data.title.size() <= 120 &&
+        data.category in [
+          'Money & Bills',
+          'Home & Living',
+          'Work & Study',
+          'Purchases',
+          'Personal Records',
+          'Other'
+        ] &&
+        isValidTagList(data.tags) &&
+        data.status in [
+          'pending',
+          'processing',
+          'needs_review',
+          'organized',
+          'error'
+        ] &&
+        isValidTimestampMs(data.created) &&
+        isValidTimestampMs(data.updatedAt) &&
+        data.deleted is bool &&
+        isNullableTimestampMs(data.deletedAt);
+    }
+
+    function isValidAction(data, actionId) {
+      return hasOnlyAllowedFields(data, [
+          'id',
+          'documentId',
+          'title',
+          'due',
+          'done',
+          'groupId',
+          'created',
+          'updatedAt',
+          'deleted',
+          'deletedAt'
+        ]) &&
+        hasRequiredFields(data, [
+          'id',
+          'documentId',
+          'title',
+          'due',
+          'done',
+          'groupId',
+          'created',
+          'updatedAt',
+          'deleted',
+          'deletedAt'
+        ]) &&
+        data.id is string &&
+        data.id == actionId &&
+        data.documentId is string &&
+        data.documentId.size() <= 120 &&
+        data.title is string &&
+        data.title.size() <= 140 &&
+        data.due is string &&
+        data.due.size() <= 10 &&
+        data.done is bool &&
+        data.groupId is string &&
+        data.groupId.size() <= 80 &&
+        isValidTimestampMs(data.created) &&
+        isValidTimestampMs(data.updatedAt) &&
+        data.deleted is bool &&
+        isNullableTimestampMs(data.deletedAt);
+    }
+
+    function isValidActionGroup(data, groupId) {
+      return hasOnlyAllowedFields(data, [
+          'id',
+          'title',
+          'created',
+          'updated',
+          'updatedAt',
+          'deleted',
+          'deletedAt'
+        ]) &&
+        hasRequiredFields(data, [
+          'id',
+          'title',
+          'created',
+          'updated',
+          'updatedAt',
+          'deleted',
+          'deletedAt'
+        ]) &&
+        data.id is string &&
+        data.id == groupId &&
+        data.title is string &&
+        data.title.size() <= 80 &&
+        isValidTimestampMs(data.created) &&
+        isValidTimestampMs(data.updated) &&
+        isValidTimestampMs(data.updatedAt) &&
+        data.deleted is bool &&
+        isNullableTimestampMs(data.deletedAt);
+    }
+
+    function isValidActionDependency(data, depId) {
+      return hasOnlyAllowedFields(data, [
+          'id',
+          'prerequisiteActionId',
+          'dependentActionId',
+          'created',
+          'updatedAt',
+          'deleted',
+          'deletedAt'
+        ]) &&
+        hasRequiredFields(data, [
+          'id',
+          'prerequisiteActionId',
+          'dependentActionId',
+          'created',
+          'updatedAt',
+          'deleted',
+          'deletedAt'
+        ]) &&
+        data.id is string &&
+        data.id == depId &&
+        data.prerequisiteActionId is string &&
+        data.prerequisiteActionId.size() > 0 &&
+        data.prerequisiteActionId.size() <= 120 &&
+        data.dependentActionId is string &&
+        data.dependentActionId.size() > 0 &&
+        data.dependentActionId.size() <= 120 &&
+        data.prerequisiteActionId != data.dependentActionId &&
+        isValidTimestampMs(data.created) &&
+        isValidTimestampMs(data.updatedAt) &&
+        data.deleted is bool &&
+        isNullableTimestampMs(data.deletedAt);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{uid}/settings/{settingId} {
+      allow read: if isOwner(uid) && settingId == 'sync';
+      allow create: if isOwner(uid) &&
+        settingId == 'sync' &&
+        isValidSyncSettings(request.resource.data);
+      allow update: if isOwner(uid) &&
+        settingId == 'sync' &&
+        isValidSyncSettings(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /users/{uid}/documents/{docId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) &&
+        isValidDocument(request.resource.data, docId);
+      allow update: if isOwner(uid) &&
+        isValidDocument(request.resource.data, docId) &&
+        isTombstonePreserved(resource.data, request.resource.data);
+      allow delete: if false;
+    }
+
+    match /users/{uid}/actions/{actionId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) &&
+        isValidAction(request.resource.data, actionId);
+      allow update: if isOwner(uid) &&
+        isValidAction(request.resource.data, actionId) &&
+        isTombstonePreserved(resource.data, request.resource.data);
+      allow delete: if false;
+    }
+
+    match /users/{uid}/actionGroups/{groupId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) &&
+        isValidActionGroup(request.resource.data, groupId);
+      allow update: if isOwner(uid) &&
+        isValidActionGroup(request.resource.data, groupId) &&
+        isTombstonePreserved(resource.data, request.resource.data);
+      allow delete: if false;
+    }
+
+    match /users/{uid}/actionDependencies/{depId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) &&
+        isValidActionDependency(request.resource.data, depId);
+      allow update: if isOwner(uid) &&
+        isValidActionDependency(request.resource.data, depId) &&
+        canUpdateDependency(resource.data, request.resource.data);
+      allow delete: if false;
+    }
+
+    // Default deny-all fallback for any unmatched path.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

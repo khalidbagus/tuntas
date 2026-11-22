@@ -1,14 +1,20 @@
 # Run and evaluate Tuntas
 
-Tuntas is a mobile-responsive web app; select Web/Chrome for judging. No native Android or iOS application is supplied. The default library belongs to one browser profile and origin. There is no account login or cross-device sync.
+Tuntas is a mobile-responsive web app in the Web/Chrome track. The local library belongs to one browser profile and origin. Signing in lets you opt in to cross-device sync for filing metadata and action progress. Original files and evidence stay on the device.
 
-## Hosted demo
+## Populated demo
 
-Open the [populated Tuntas demo](https://tuntas-dev.web.app/?demo=1#/home) in Chrome. A fresh demo workspace starts with one item in Inbox, eight filed documents in Library, and two open actions. Use the header language picker for **English** or **Bahasa Indonesia**.
+Start the local server below and open the [sample workspace](http://127.0.0.1:5173/?demo=1#/home) in Chrome. The [hosted demo](https://tuntas-dev.web.app/?demo=1#/home) reflects the most recent deployment. With the latest source, a fresh demo starts with **2 Inbox items**, **12 filed documents** covering all six categories, and **7 open follow-ups** across two groups and one standalone step. Use the header language picker for **English** or **Bahasa Indonesia**.
 
-1. Open **Inbox → Northgrid Water & Power billing notice**. Compare the two dates with the original, then choose **Confirm & file**.
-2. Open **Library** and search `184.000`. Open **Restaurant dinner receipt** and expand **Original document** to see the redacted photograph. Four photographed receipt samples are filed in Library. Their totals were entered for the demo.
-3. Open **Actions**, then follow the household membership link to its source notice. **Exit demo** returns to the separate personal workspace.
+1. Open **Actions → Training reimbursement**. **Save training approval** is complete, **Check workshop invoice** starts overdue, and **Submit reimbursement claim** waits for both prerequisites. The claim is due on the day the examples are first added. **Today’s Focus** recommends the invoice when it is the highest-priority ready step.
+2. Open **View connections** to see both prerequisites converge on the claim. Open **Check workshop invoice** and read **Evidence at a glance**. Complete it to advance from `1 of 4` to `2 of 4` and make the claim **Ready**.
+3. Try **Household membership renewal** for a three-step chain across two source notices. Use **No Due Date** to find **Verify confirmation** and try adding or removing a deadline.
+4. Open **Inbox → Northgrid Water & Power billing notice** and compare the two dates with the original. Open **Courtyard room booking note** to review an ambiguous category, choose a category, and select **Confirm & file**.
+5. Open **Library**. Search for `TR-608` to find the related approval and invoice across categories. Search for `BL-2048` under **Personal Records** and expand **Original document** to read its text and download the synthetic policy PDF.
+6. Open **Undangan pengarahan relawan** under **Other**. Use **Add follow-up** to create the suggested action with an optional due date. Under **Purchases**, search for `184.000` and open **Restaurant dinner receipt** to inspect one of four redacted receipt photos with manually entered totals.
+7. Choose **Exit demo** to return to the separate personal workspace.
+
+On the development machine, use [the private local demo](http://127.0.0.1:5173/?demo=1&receipts=1#/library) to see the additional photographed receipts under **Purchases**. These fixtures live in the ignored `.release/private-demo-receipts` directory and are served only by the loopback development server.
 
 For live cloud AI, use **Capture → Paste text** with a fresh synthetic renewal, select **Firebase AI · prefer device, allow cloud**, and check the per-document consent box. On a browser without a ready on-device model, inspect the **Firebase · cloud** label and the quoted evidence. Confirm the follow-up, reload Actions, and reopen its source.
 

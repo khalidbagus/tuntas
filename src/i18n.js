@@ -145,6 +145,48 @@ const runtimeMessages = {
   "Follow-up already saved in Actions.":
     "Tindak lanjut sudah tersimpan di Tindakan.",
   "Follow-up draft dismissed.": "Draf tindak lanjut diabaikan.",
+  "Action not found.": "Tindakan tidak ditemukan.",
+  "Choose a valid calendar date.": "Pilih tanggal kalender yang valid.",
+  "Give your group a short name.": "Beri grup Anda nama singkat.",
+  "Group not found.": "Grup tidak ditemukan.",
+  "Both actions must exist before linking.":
+    "Kedua tindakan harus ada sebelum ditautkan.",
+  "An action cannot depend on itself.":
+    "Tindakan tidak dapat bergantung pada dirinya sendiri.",
+  "Place both actions in the same group before linking them.":
+    "Masukkan kedua tindakan ke grup yang sama sebelum menautkannya.",
+  "This connection already exists.": "Tautan ini sudah ada.",
+  "This link would create a circular dependency.":
+    "Tautan ini akan membuat ketergantungan melingkar.",
+  "Due date updated.": "Tanggal tenggat diperbarui.",
+  "Due date removed.": "Tanggal tenggat dihapus.",
+  "Group created.": "Grup dibuat.",
+  "Group renamed.": "Nama grup diperbarui.",
+  "Group removed. Actions kept.": "Grup dihapus. Tindakan tetap disimpan.",
+  "Added to group.": "Ditambahkan ke grup.",
+  "Moved out of group.": "Dikeluarkan dari grup.",
+  "Connection added.": "Tautan ditambahkan.",
+  "Connection removed.": "Tautan dihapus.",
+  "Action completed.": "Tindakan diselesaikan.",
+  "Action reopened.": "Tindakan dibuka kembali.",
+  "Document deleted.": "Dokumen dihapus.",
+  "The document could not be deleted. Try again.":
+    "Dokumen tidak dapat dihapus. Coba lagi.",
+  "Signed in.": "Berhasil masuk.",
+  "Account created. Check your inbox for a verification email.":
+    "Akun dibuat. Periksa kotak masuk Anda untuk email verifikasi.",
+  "Account created.": "Akun dibuat.",
+  "Signed out. Switched back to your device-only workspace.":
+    "Berhasil keluar. Beralih kembali ke ruang kerja khusus perangkat Anda.",
+  "Progress sync enabled.": "Sinkronisasi progres diaktifkan.",
+  "Progress sync paused. Your workspace stays on this device.":
+    "Sinkronisasi progres dijeda. Ruang kerja Anda tetap tersimpan di perangkat ini.",
+  "Local records imported into your account workspace.":
+    "Catatan lokal diimpor ke ruang kerja akun Anda.",
+  "Verification email sent.": "Email verifikasi dikirim.",
+  "Verification status updated.": "Status verifikasi diperbarui.",
+  "Password reset email sent. Check your inbox.":
+    "Email pengaturan ulang kata sandi dikirim. Periksa kotak masuk Anda.",
 };
 
 export function translateRuntimeMessage(message, lang) {
@@ -371,6 +413,233 @@ const messages = {
     noticeAddedToActions: "Added to Actions.",
     noticeFollowUpAlreadySaved: "Follow-up already saved in Actions.",
     noticeFollowUpDismissed: "Follow-up draft dismissed.",
+    allDocuments: "All Documents",
+    categoryPickerLabel: "Browse by category",
+    clearSearch: "Clear search",
+    urgencyOverdue: "Overdue",
+    urgencyDueToday: "Due Today",
+    urgencyDueSoon: "Due Soon",
+    urgencyUpcoming: "Upcoming",
+    urgencyNoDueDate: "No Due Date",
+    urgencyCompleted: "Completed",
+    noDueDateLabel: "No due date",
+    todaysFocusHeading: "Today’s Focus",
+    todaysFocusReadyLabel: "Recommended next step",
+    todaysFocusGroupContext: ({ group }) => `In ${group}`,
+    todaysFocusWhyOverdue:
+      "This ready step is past its due date and has no unfinished prerequisites.",
+    todaysFocusWhyDueToday:
+      "This ready step is due today and can be completed now.",
+    todaysFocusWhyDueSoon: ({ days }) =>
+      days === 1
+        ? "This ready step is due tomorrow."
+        : `This ready step is due in ${days} days.`,
+    todaysFocusWhyUpcoming:
+      "This is the earliest ready follow-up with a confirmed due date.",
+    todaysFocusWhyNoDate:
+      "This ready follow-up is waiting for your attention and has no due date yet.",
+    todaysFocusOpenAction: "Open action",
+    todaysFocusOpenDocument: "Open source document",
+    todaysFocusWaitingTitle:
+      "All open steps are waiting on an earlier step",
+    todaysFocusWaitingBody: ({ count, group }) =>
+      group
+        ? `${count} open follow-up(s) in “${group}” are waiting on unfinished prerequisites. Review steps in Actions.`
+        : `${count} open follow-up(s) are waiting on unfinished prerequisites. Review steps in Actions.`,
+    todaysFocusGoActions: "Review in Actions",
+    todaysFocusAllDoneTitle: "Everything on your list is complete",
+    todaysFocusAllDoneBody: ({ count }) =>
+      count === 1
+        ? "1 completed follow-up is saved in Actions."
+        : `${count} completed follow-ups are saved in Actions.`,
+    todaysFocusEmptyTitle: "No follow-ups need attention right now",
+    todaysFocusEmptyBody:
+      "When a document needs a next step, confirm a follow-up on its detail page and it will appear here.",
+    actionsFilterLabel: "Filter actions",
+    filterAll: "All",
+    filterOpen: "Open",
+    filterNoDueDate: "No Due Date",
+    filterCompleted: "Completed",
+    noActionsInFilter: "No actions match this filter.",
+    showAllActions: "Show all actions",
+    newGroup: "New group",
+    groupNameLabel: "Group name",
+    groupNamePlaceholder: "e.g., Household membership renewal",
+    createGroup: "Create group",
+    renameGroup: "Rename",
+    saveGroupName: "Save name",
+    deleteGroup: "Remove group",
+    deleteGroupConfirm:
+      "Remove this group? Its actions will stay in Standalone actions and their step links will be cleared.",
+    confirmRemoveGroup: "Confirm removal",
+    collapseGroup: "Collapse group",
+    expandGroup: "Expand group",
+    groupProgress: ({ completed, total }) =>
+      `${completed} of ${total} steps completed`,
+    groupProgressBarLabel: ({ title, completed, total }) =>
+      `${title}: ${completed} of ${total} steps completed`,
+    emptyGroupNote:
+      "No steps in this group yet. Use “Add to group” on any action below to include it here.",
+    standaloneActionsHeading: "Standalone actions",
+    stateReady: "Ready",
+    stateWaiting: "Waiting",
+    waitingSummary: ({ count }) =>
+      count === 1 ? "Waiting on 1 step" : `Waiting on ${count} steps`,
+    showDetails: "Details",
+    hideDetails: "Hide details",
+    overridePromptTitle:
+      "This step is waiting on unfinished prerequisites:",
+    completeAnyway: "Complete anyway",
+    evidenceHeading: "Evidence at a glance",
+    evidenceSourceDoc: "Source document",
+    evidenceSourceQuote: "Quoted from original document",
+    evidenceNoQuote:
+      "No source excerpt was recorded for this action. Open the original document to review the full record.",
+    evidenceDueAndStatus: "Confirmed due date & status",
+    evidenceUserEnteredNote:
+      "Due dates and steps can be adjusted by you; original source files never change.",
+    openOriginalDocument: "Open original document",
+    editDueDateHeading: "Due date",
+    saveDueDate: "Save date",
+    removeDueDate: "Remove date",
+    groupAssignmentLabel: "Group",
+    noGroupOption: "No group (standalone)",
+    addToGroupLabel: "Add to group",
+    groupChangeClearsLinksHint:
+      "Moving an action between groups clears its step connections.",
+    manageStepsHeading: "Step connections",
+    dependsOnHeading: "Depends on",
+    unlocksHeading: "Unlocks",
+    noPrerequisites:
+      "No prerequisites — this step is ready whenever you are.",
+    addPrerequisiteLabel: "Add prerequisite",
+    choosePrerequisiteOption: "Choose a step in this group…",
+    linkStepButton: "Connect step",
+    removeLink: "Remove link",
+    jumpToStep: "Jump to step",
+    groupNeededToLink:
+      "Assign this action to a group above before linking prerequisites.",
+    noOtherStepsInGroup:
+      "Add another action to this group to connect prerequisites.",
+    viewConnections: "View connections",
+    hideConnections: "Hide connections",
+    connectionsGraphTitle: ({ title }) => `Connections · ${title}`,
+    connectionsGraphHint:
+      "Arrows point from each prerequisite step to the step it unlocks. Select a step to inspect its relationships.",
+    zoomOut: "Zoom out",
+    zoomIn: "Zoom in",
+    zoomReset: "Reset zoom",
+    zoomResetShort: "Reset",
+    graphAriaLabel: ({ title }) => `Dependency diagram for ${title}`,
+    graphNodeAria: ({ title, status }) => `${title}, ${status}`,
+    graphSelectedStep: "Selected step",
+    graphNoConnectionsYet:
+      "No connections in this group yet. Expand a step below and use “Add prerequisite” to connect steps.",
+    graphTextListHeading: "Text relationship list",
+    graphOpenStepInList: "Focus step in list",
+    graphArrowLabel: "unlocks",
+    graphStandaloneStep: "Independent step (no prerequisite links yet)",
+    deleteDocument: "Delete document",
+    deleteDocumentConfirmHeading: ({ title }) => `Delete “${title}”?`,
+    deleteDocumentConfirmBody:
+      "This permanently removes the saved original and any follow-ups linked to it from this workspace.",
+    deleteDocumentConfirmWithActions: ({ count }) =>
+      count === 1
+        ? "This permanently removes the saved original and 1 linked follow-up from this workspace."
+        : `This permanently removes the saved original and ${count} linked follow-ups from this workspace.`,
+    confirmDeleteDocument: "Delete permanently",
+    deletingDocument: "Deleting…",
+    navAccount: "Account",
+    pageAccount: "Account",
+    accountKicker: "Account & sync",
+    accountTitle: "Account",
+    accountDescription:
+      "Sign in to keep filing status and action progress synced across devices while keeping originals on this device.",
+    accountRailSignInHint: "Sign in or manage sync",
+    accountRailSignedInSub: "Account workspace · this device",
+    accountDemoTitle: "Accounts are disabled in the sample workspace",
+    accountDemoBody:
+      "Sample mode keeps synthetic data isolated in this browser profile with zero cloud writes. Exit demo to sign in or access your personal workspace.",
+    accountUnavailableTitle: "Cloud sign-in is not configured here",
+    accountUnavailableBody:
+      "This build has no Firebase Authentication configuration. You can still capture, organize, and track actions offline on this device.",
+    continueOnThisDevice: "Continue on this device",
+    continueWithGoogle: "Continue with Google",
+    googleHint:
+      "Creates your account on first sign-in and signs you back in on return visits.",
+    authTabSignIn: "Sign in",
+    authTabCreate: "Create account",
+    authTabReset: "Forgot password",
+    authEmailLabel: "Email address",
+    authPasswordLabel: "Password",
+    authPasswordHint: "At least 6 characters",
+    authSubmitSignIn: "Sign in",
+    authSubmitCreate: "Create account",
+    authSubmitReset: "Send reset email",
+    authErrorPopupClosed:
+      "Google sign-in was canceled before finishing. Try again when ready.",
+    authErrorPopupBlocked:
+      "Your browser blocked the sign-in popup. Allow popups for this site or sign in with email and password.",
+    authErrorDifferentCredential:
+      "An account with this email already exists using another sign-in method (such as email and password). Sign in with that method first.",
+    authErrorEmailInUse:
+      "An account already exists with this email. Sign in or reset your password instead.",
+    authErrorInvalidCredentials:
+      "Email or password did not match an account.",
+    authErrorWeakPassword: "Choose a password with at least 6 characters.",
+    authErrorInvalidEmail: "Enter a valid email address.",
+    authErrorTooManyRequests:
+      "Too many attempts right now. Wait a moment and try again.",
+    authErrorNetwork:
+      "Network error while contacting Firebase Auth. Check your connection and try again.",
+    authErrorUnauthorizedDomain:
+      "This domain is not authorized for Google sign-in in Firebase Console. Add this host to Authorized Domains.",
+    authErrorRecentLogin:
+      "For security, sign out and sign back in before retrying that action.",
+    authErrorGeneric: "Sign-in could not be completed. Try again.",
+    signedInAsHeading: "Signed in",
+    providerGoogle: "Google",
+    providerEmail: "Email & password",
+    uidIsolatedChip: "UID-isolated workspace",
+    emailVerifiedChip: "Verified",
+    emailPendingChip: "Verification pending",
+    emailVerifyHint:
+      "Verify your email address so password resets and account recovery stay reliable.",
+    resendVerification: "Resend verification email",
+    refreshVerification: "I’ve verified",
+    signOut: "Sign out",
+    syncSectionTitle: "Optional progress sync",
+    syncWhatSyncsLabel: "Synced to your account",
+    syncWhatSyncsBody:
+      "Document titles, categories, tags, filing status, action due dates, completion states, groups, and prerequisite links.",
+    syncWhatStaysLocalLabel: "Kept on this device only",
+    syncWhatStaysLocalBody:
+      "Original PDFs and photos, extracted document text, and evidence excerpts stay in browser storage and are never uploaded.",
+    syncBillingNote:
+      "Original-file cloud sync across devices is a separate future feature requiring a Firebase billing decision.",
+    syncRemoteDetectedNote:
+      "Progress sync is already active on another device for this account. Enable sync on this device to view and update shared progress.",
+    syncStatusOff: "Sync off",
+    syncStatusPending: "Pending",
+    syncStatusSynced: "Synced",
+    syncStatusFailed: "Failed",
+    syncPendingCount: ({ n }) =>
+      n === 1 ? "1 change waiting to sync" : `${n} changes waiting to sync`,
+    syncLastSyncedAt: ({ time }) => `Last synced ${time}`,
+    enableSync: "Enable sync",
+    disableSync: "Disable sync",
+    syncNow: "Sync now",
+    retrySync: "Retry sync",
+    importPromptHeading: "Import records from this device?",
+    importPromptBody: ({ docs, actions }) =>
+      `This browser has ${docs} local document(s) and ${actions} follow-up(s) created while signed out. Your local copies stay preserved on this device.`,
+    importAndEnableSync: "Import local records & enable sync",
+    enableWithoutImport: "Enable sync without importing",
+    importLocalRecords: ({ docs, actions }) =>
+      `Import local records (${docs} docs · ${actions} actions)`,
+    remoteOnlyChip: "Synced from another device",
+    originalUnavailableOnDevice:
+      "Original file, extracted text, and evidence excerpts stay on the device where this document was captured. Original-file sync is not included on this plan.",
   },
   id: {
     skipToContent: "Lewati ke konten",
@@ -594,6 +863,229 @@ const messages = {
     noticeAddedToActions: "Ditambahkan ke Tindakan.",
     noticeFollowUpAlreadySaved: "Tindak lanjut sudah tersimpan di Tindakan.",
     noticeFollowUpDismissed: "Draf tindak lanjut diabaikan.",
+    allDocuments: "Semua Dokumen",
+    categoryPickerLabel: "Telusuri berdasarkan kategori",
+    clearSearch: "Hapus pencarian",
+    urgencyOverdue: "Terlambat",
+    urgencyDueToday: "Jatuh Tempo Hari Ini",
+    urgencyDueSoon: "Segera Jatuh Tempo",
+    urgencyUpcoming: "Mendatang",
+    urgencyNoDueDate: "Tanpa Tenggat",
+    urgencyCompleted: "Selesai",
+    noDueDateLabel: "Tanpa tanggal tenggat",
+    todaysFocusHeading: "Fokus Hari Ini",
+    todaysFocusReadyLabel: "Langkah berikutnya yang disarankan",
+    todaysFocusGroupContext: ({ group }) => `Di ${group}`,
+    todaysFocusWhyOverdue:
+      "Langkah yang siap ini sudah melewati tanggal tenggat dan tidak memiliki prasyarat yang belum selesai.",
+    todaysFocusWhyDueToday:
+      "Langkah yang siap ini jatuh tempo hari ini dan dapat diselesaikan sekarang.",
+    todaysFocusWhyDueSoon: ({ days }) =>
+      days === 1
+        ? "Langkah yang siap ini jatuh tempo besok."
+        : `Langkah yang siap ini jatuh tempo dalam ${days} hari.`,
+    todaysFocusWhyUpcoming:
+      "Ini tindak lanjut siap paling awal yang memiliki tenggat terkonfirmasi.",
+    todaysFocusWhyNoDate:
+      "Tindak lanjut yang siap ini menunggu perhatian Anda dan belum memiliki tanggal tenggat.",
+    todaysFocusOpenAction: "Buka tindakan",
+    todaysFocusOpenDocument: "Buka dokumen sumber",
+    todaysFocusWaitingTitle:
+      "Semua langkah terbuka sedang menunggu langkah sebelumnya",
+    todaysFocusWaitingBody: ({ count, group }) =>
+      group
+        ? `${count} tindak lanjut terbuka di “${group}” menunggu prasyarat yang belum selesai. Tinjau langkah di Tindakan.`
+        : `${count} tindak lanjut terbuka menunggu prasyarat yang belum selesai. Tinjau langkah di Tindakan.`,
+    todaysFocusGoActions: "Tinjau di Tindakan",
+    todaysFocusAllDoneTitle: "Semua di daftar Anda sudah selesai",
+    todaysFocusAllDoneBody: ({ count }) =>
+      `${count} tindak lanjut selesai tersimpan di Tindakan.`,
+    todaysFocusEmptyTitle:
+      "Belum ada tindak lanjut yang perlu perhatian saat ini",
+    todaysFocusEmptyBody:
+      "Saat dokumen memerlukan langkah lanjutan, konfirmasikan tindak lanjut di halaman detailnya agar muncul di sini.",
+    actionsFilterLabel: "Filter tindakan",
+    filterAll: "Semua",
+    filterOpen: "Terbuka",
+    filterNoDueDate: "Tanpa Tenggat",
+    filterCompleted: "Selesai",
+    noActionsInFilter: "Tidak ada tindakan yang cocok dengan filter ini.",
+    showAllActions: "Tampilkan semua tindakan",
+    newGroup: "Grup baru",
+    groupNameLabel: "Nama grup",
+    groupNamePlaceholder: "mis., Perpanjangan keanggotaan rumah tangga",
+    createGroup: "Buat grup",
+    renameGroup: "Ubah nama",
+    saveGroupName: "Simpan nama",
+    deleteGroup: "Hapus grup",
+    deleteGroupConfirm:
+      "Hapus grup ini? Tindakan di dalamnya tetap tersimpan sebagai tindakan mandiri dan tautan langkahnya akan dihapus.",
+    confirmRemoveGroup: "Konfirmasi penghapusan",
+    collapseGroup: "Ciutkan grup",
+    expandGroup: "Bentangkan grup",
+    groupProgress: ({ completed, total }) =>
+      `${completed} dari ${total} langkah selesai`,
+    groupProgressBarLabel: ({ title, completed, total }) =>
+      `${title}: ${completed} dari ${total} langkah selesai`,
+    emptyGroupNote:
+      "Belum ada langkah di grup ini. Gunakan “Tambahkan ke grup” pada tindakan di bawah untuk memasukkannya ke sini.",
+    standaloneActionsHeading: "Tindakan mandiri",
+    stateReady: "Siap",
+    stateWaiting: "Menunggu",
+    waitingSummary: ({ count }) => `Menunggu ${count} langkah`,
+    showDetails: "Detail",
+    hideDetails: "Sembunyikan detail",
+    overridePromptTitle:
+      "Langkah ini masih menunggu prasyarat yang belum selesai:",
+    completeAnyway: "Tetap selesaikan",
+    evidenceHeading: "Ringkasan bukti",
+    evidenceSourceDoc: "Dokumen sumber",
+    evidenceSourceQuote: "Kutipan dari dokumen asli",
+    evidenceNoQuote:
+      "Tidak ada kutipan sumber yang tercatat untuk tindakan ini. Buka dokumen asli untuk memeriksa catatan lengkapnya.",
+    evidenceDueAndStatus: "Tenggat terkonfirmasi & status",
+    evidenceUserEnteredNote:
+      "Tanggal tenggat dan langkah dapat Anda sesuaikan; file asli tidak pernah berubah.",
+    openOriginalDocument: "Buka dokumen asli",
+    editDueDateHeading: "Tanggal tenggat",
+    saveDueDate: "Simpan tanggal",
+    removeDueDate: "Hapus tanggal",
+    groupAssignmentLabel: "Grup",
+    noGroupOption: "Tanpa grup (mandiri)",
+    addToGroupLabel: "Tambahkan ke grup",
+    groupChangeClearsLinksHint:
+      "Memindahkan tindakan ke grup lain akan menghapus tautan langkahnya.",
+    manageStepsHeading: "Keterkaitan langkah",
+    dependsOnHeading: "Bergantung pada",
+    unlocksHeading: "Membuka langkah",
+    noPrerequisites:
+      "Tidak ada prasyarat — langkah ini siap dikerjakan kapan saja.",
+    addPrerequisiteLabel: "Tambah prasyarat",
+    choosePrerequisiteOption: "Pilih langkah di grup ini…",
+    linkStepButton: "Tautkan langkah",
+    removeLink: "Hapus tautan",
+    jumpToStep: "Buka langkah",
+    groupNeededToLink:
+      "Masukkan tindakan ini ke grup di atas sebelum menautkan prasyarat.",
+    noOtherStepsInGroup:
+      "Tambahkan tindakan lain ke grup ini untuk menautkan prasyarat.",
+    viewConnections: "Lihat keterkaitan",
+    hideConnections: "Tutup keterkaitan",
+    connectionsGraphTitle: ({ title }) => `Keterkaitan · ${title}`,
+    connectionsGraphHint:
+      "Panah mengarah dari langkah prasyarat ke langkah berikutnya yang dibuka. Pilih langkah untuk memeriksa keterkaitannya.",
+    zoomOut: "Perkecil",
+    zoomIn: "Perbesar",
+    zoomReset: "Atur ulang zoom",
+    zoomResetShort: "Reset",
+    graphAriaLabel: ({ title }) => `Diagram keterkaitan untuk ${title}`,
+    graphNodeAria: ({ title, status }) => `${title}, ${status}`,
+    graphSelectedStep: "Langkah dipilih",
+    graphNoConnectionsYet:
+      "Belum ada keterkaitan di grup ini. Buka detail langkah di bawah lalu gunakan “Tambah prasyarat” untuk menghubungkan langkah.",
+    graphTextListHeading: "Daftar keterkaitan teks",
+    graphOpenStepInList: "Fokuskan langkah di daftar",
+    graphArrowLabel: "membuka",
+    graphStandaloneStep: "Langkah independen (belum memiliki tautan prasyarat)",
+    deleteDocument: "Hapus dokumen",
+    deleteDocumentConfirmHeading: ({ title }) => `Hapus “${title}”?`,
+    deleteDocumentConfirmBody:
+      "Ini akan menghapus permanen dokumen asli yang tersimpan beserta tindak lanjut yang tertaut dari ruang kerja ini.",
+    deleteDocumentConfirmWithActions: ({ count }) =>
+      `Ini akan menghapus permanen dokumen asli yang tersimpan dan ${count} tindak lanjut yang tertaut dari ruang kerja ini.`,
+    confirmDeleteDocument: "Hapus permanen",
+    deletingDocument: "Menghapus…",
+    navAccount: "Akun",
+    pageAccount: "Akun",
+    accountKicker: "Akun & sinkronisasi",
+    accountTitle: "Akun",
+    accountDescription:
+      "Masuk untuk menyinkronkan status pengarsipan dan progres tindakan lintas perangkat sambil menjaga dokumen asli tetap di perangkat ini.",
+    accountRailSignInHint: "Masuk atau kelola sinkronisasi",
+    accountRailSignedInSub: "Ruang kerja akun · perangkat ini",
+    accountDemoTitle: "Akun dinonaktifkan di ruang kerja sampel",
+    accountDemoBody:
+      "Mode sampel menyimpan data sintetis terpisah di profil browser ini tanpa penulisan cloud. Keluar dari demo untuk masuk atau membuka ruang kerja pribadi Anda.",
+    accountUnavailableTitle: "Masuk cloud belum dikonfigurasi di sini",
+    accountUnavailableBody:
+      "Build ini tidak memiliki konfigurasi Firebase Authentication. Anda tetap dapat menangkap, merapikan, dan melacak tindakan secara offline di perangkat ini.",
+    continueOnThisDevice: "Lanjutkan di perangkat ini",
+    continueWithGoogle: "Lanjutkan dengan Google",
+    googleHint:
+      "Membuat akun saat pertama kali masuk dan langsung masuk pada kunjungan berikutnya.",
+    authTabSignIn: "Masuk",
+    authTabCreate: "Buat akun",
+    authTabReset: "Lupa kata sandi",
+    authEmailLabel: "Alamat email",
+    authPasswordLabel: "Kata sandi",
+    authPasswordHint: "Minimal 6 karakter",
+    authSubmitSignIn: "Masuk",
+    authSubmitCreate: "Buat akun",
+    authSubmitReset: "Kirim email pengaturan ulang",
+    authErrorPopupClosed:
+      "Masuk dengan Google dibatalkan sebelum selesai. Coba lagi saat Anda siap.",
+    authErrorPopupBlocked:
+      "Browser Anda memblokir jendela popup masuk. Izinkan popup untuk situs ini atau masuk menggunakan email dan kata sandi.",
+    authErrorDifferentCredential:
+      "Akun dengan email ini sudah terdaftar menggunakan metode masuk lain (seperti email dan kata sandi). Masuk dengan metode tersebut terlebih dahulu.",
+    authErrorEmailInUse:
+      "Akun dengan email ini sudah ada. Silakan masuk atau atur ulang kata sandi Anda.",
+    authErrorInvalidCredentials:
+      "Email atau kata sandi tidak cocok dengan akun mana pun.",
+    authErrorWeakPassword: "Pilih kata sandi minimal 6 karakter.",
+    authErrorInvalidEmail: "Masukkan alamat email yang valid.",
+    authErrorTooManyRequests:
+      "Terlalu banyak percobaan saat ini. Tunggu sebentar lalu coba lagi.",
+    authErrorNetwork:
+      "Kesalahan jaringan saat menghubungi Firebase Auth. Periksa koneksi Anda lalu coba lagi.",
+    authErrorUnauthorizedDomain:
+      "Domain ini belum diotorisasi untuk masuk dengan Google di Firebase Console. Tambahkan host ini ke Authorized Domains.",
+    authErrorRecentLogin:
+      "Demi keamanan, keluar lalu masuk kembali sebelum mengulangi tindakan ini.",
+    authErrorGeneric: "Proses masuk tidak dapat diselesaikan. Coba lagi.",
+    signedInAsHeading: "Masuk sebagai",
+    providerGoogle: "Google",
+    providerEmail: "Email & kata sandi",
+    uidIsolatedChip: "Ruang kerja terisolasi UID",
+    emailVerifiedChip: "Terverifikasi",
+    emailPendingChip: "Menunggu verifikasi",
+    emailVerifyHint:
+      "Verifikasi alamat email Anda agar pengaturan ulang kata sandi dan pemulihan akun tetap berjalan baik.",
+    resendVerification: "Kirim ulang email verifikasi",
+    refreshVerification: "Saya sudah verifikasi",
+    signOut: "Keluar",
+    syncSectionTitle: "Sinkronisasi progres opsional",
+    syncWhatSyncsLabel: "Disinkronkan ke akun Anda",
+    syncWhatSyncsBody:
+      "Judul dokumen, kategori, tag, status pengarsipan, tenggat tindakan, status selesai, grup, dan tautan prasyarat.",
+    syncWhatStaysLocalLabel: "Disimpan hanya di perangkat ini",
+    syncWhatStaysLocalBody:
+      "File PDF dan foto asli, teks dokumen yang diekstrak, serta kutipan bukti tetap di penyimpanan browser dan tidak pernah diunggah.",
+    syncBillingNote:
+      "Sinkronisasi file asli lintas perangkat merupakan fitur terpisah yang memerlukan keputusan penagihan Firebase.",
+    syncRemoteDetectedNote:
+      "Sinkronisasi progres sudah aktif di perangkat lain untuk akun ini. Aktifkan sinkronisasi di perangkat ini untuk melihat dan memperbarui progres bersama.",
+    syncStatusOff: "Sinkronisasi nonaktif",
+    syncStatusPending: "Tertunda",
+    syncStatusSynced: "Tersinkron",
+    syncStatusFailed: "Gagal",
+    syncPendingCount: ({ n }) =>
+      `${n} perubahan menunggu sinkronisasi`,
+    syncLastSyncedAt: ({ time }) => `Terakhir disinkronkan ${time}`,
+    enableSync: "Aktifkan sinkronisasi",
+    disableSync: "Nonaktifkan sinkronisasi",
+    syncNow: "Sinkronkan sekarang",
+    retrySync: "Coba sinkronkan lagi",
+    importPromptHeading: "Impor catatan dari perangkat ini?",
+    importPromptBody: ({ docs, actions }) =>
+      `Browser ini memiliki ${docs} dokumen lokal dan ${actions} tindak lanjut yang dibuat saat belum masuk. Salinan lokal Anda tetap tersimpan aman di perangkat ini.`,
+    importAndEnableSync: "Impor catatan lokal & aktifkan sinkronisasi",
+    enableWithoutImport: "Aktifkan sinkronisasi tanpa mengimpor",
+    importLocalRecords: ({ docs, actions }) =>
+      `Impor catatan lokal (${docs} dokumen · ${actions} tindakan)`,
+    remoteOnlyChip: "Disinkronkan dari perangkat lain",
+    originalUnavailableOnDevice:
+      "File asli, teks yang diekstrak, dan kutipan bukti tetap berada di perangkat tempat dokumen ini ditangkap. Sinkronisasi file asli tidak termasuk dalam paket ini.",
   },
 };
 

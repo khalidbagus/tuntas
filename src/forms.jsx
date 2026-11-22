@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useId, useState, useRef } from "react";
 import {
   Camera,
   Upload,
@@ -11,6 +11,8 @@ import {
   Plus,
   Monitor,
   Check,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { Heading, date } from "./ui.jsx";
 import { configured } from "./engine.js";
@@ -237,7 +239,8 @@ function Original({ doc, detailsRef, defaultOpen = false }) {
   const t = createTranslator(lang);
   const [url, setUrl] = useState(""),
     [source, setSource] = useState(""),
-    [broken, setBroken] = useState(false);
+    [broken, setBroken] = useState(false),
+    [missingOriginal, setMissingOriginal] = useState(false);
   useEffect(() => {
     if (defaultOpen && detailsRef?.current) detailsRef.current.open = true;
   }, [defaultOpen, detailsRef]);
@@ -245,9 +248,14 @@ function Original({ doc, detailsRef, defaultOpen = false }) {
     let active = true,
       objectURL;
     setBroken(false);
+    setMissingOriginal(false);
     original(doc.id)
       .then(async (blob) => {
-        if (!blob || !active) return;
+        if (!active) return;
+        if (!blob) {
+          setMissingOriginal(true);
+          return;
+        }
         objectURL = URL.createObjectURL(blob);
         setUrl(objectURL);
         if (doc.mime === "text/plain") {
@@ -255,7 +263,9 @@ function Original({ doc, detailsRef, defaultOpen = false }) {
           if (active) setSource(t);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (active) setMissingOriginal(true);
+      });
     return () => {
       active = false;
       if (objectURL) URL.revokeObjectURL(objectURL);
@@ -268,29 +278,36 @@ function Original({ doc, detailsRef, defaultOpen = false }) {
       open={defaultOpen || undefined}
     >
       <summary>{t("originalDocumentSummary")}</summary>
-      <small>
-        {doc.name} · {doc.mime} · {Math.max(1, Math.ceil(doc.size / 1024))} KB
-      </small>
-      {doc.mime === "text/plain" ? (
-        <pre>{source}</pre>
-      ) : doc.mime.startsWith("image/") && url && !broken ? (
-        <img
-          src={url}
-          alt={t("originalCapturedAlt")}
-          onError={() => setBroken(true)}
-        />
-      ) : doc.mime.startsWith("image/") && broken ? (
-        <p>{t("imagePreviewUnavailable")}</p>
-      ) : doc.text ? (
-        <pre>{doc.text}</pre>
+      {missingOriginal || doc.remoteOnly ? (
+        <div className="note">{t("originalUnavailableOnDevice")}</div>
       ) : (
-        <p>{t("downloadPdfFallback")}</p>
-      )}
-      {url && (
-        <a className="text-link" download={doc.name} href={url}>
-          <Download size={16} aria-hidden="true" />
-          {t("downloadOriginal")}
-        </a>
+        <>
+          <small>
+            {doc.name} · {doc.mime} · {Math.max(1, Math.ceil(doc.size / 1024))}{" "}
+            KB
+          </small>
+          {doc.mime === "text/plain" ? (
+            <pre>{source}</pre>
+          ) : doc.mime.startsWith("image/") && url && !broken ? (
+            <img
+              src={url}
+              alt={t("originalCapturedAlt")}
+              onError={() => setBroken(true)}
+            />
+          ) : doc.mime.startsWith("image/") && broken ? (
+            <p>{t("imagePreviewUnavailable")}</p>
+          ) : doc.text ? (
+            <pre>{doc.text}</pre>
+          ) : (
+            <p>{t("downloadPdfFallback")}</p>
+          )}
+          {url && (
+            <a className="text-link" download={doc.name} href={url}>
+              <Download size={16} aria-hidden="true" />
+              {t("downloadOriginal")}
+            </a>
+          )}
+        </>
       )}
     </details>
   );
@@ -300,6 +317,7 @@ export function Detail({
   actions = [],
   save,
   undo,
+  remove,
   retry,
   add,
   dismissFollowUp,
@@ -312,6 +330,8 @@ export function Detail({
   const locale = localeFor(lang);
   const [editing, setEditing] = useState(false),
     [adding, setAdding] = useState(false),
+    [confirmingDelete, setConfirmingDelete] = useState(false),
+    [deletingDoc, setDeletingDoc] = useState(false),
     [title, setTitle] = useState(doc.title),
     [category, setCategory] = useState(doc.category),
     [tags, setTags] = useState(doc.tags.join(", ")),
@@ -322,7 +342,10 @@ export function Detail({
     [suggestionQuote, setSuggestionQuote] = useState(""),
     [savingAction, setSavingAction] = useState(false);
   const originalRef = useRef(null),
-    actionTitleRef = useRef(null);
+    actionTitleRef = useRef(null),
+    cancelDeleteRef = useRef(null),
+    deleteTriggerRef = useRef(null),
+    deleteHeadingId = useId();
   const filed = doc.status === "organized",
     failed = ["error", "pending", "processing"].includes(doc.status),
     suggestion = doc.followUp || null,
@@ -351,6 +374,16 @@ export function Detail({
     });
     return () => cancelAnimationFrame(frame);
   }, [adding, suggestionKey]);
+  useEffect(() => {
+    if (!confirmingDelete) return;
+    const frame = requestAnimationFrame(() => {
+      const el = cancelDeleteRef.current;
+      if (!el) return;
+      el.scrollIntoView({ block: "nearest" });
+      el.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [confirmingDelete]);
   const openFollowUp = () => {
     if (!suggestion) return;
     setTask(suggestion.title);
@@ -406,6 +439,9 @@ export function Detail({
                 ? t("statusNeedsAttention")
                 : t("statusNeedsReview")}
           </span>
+          {doc.remoteOnly && (
+            <span className="chip blue">{t("remoteOnlyChip")}</span>
+          )}
           <small>{translateMode(doc.mode, lang)}</small>
         </div>
         {!filed && (
@@ -681,11 +717,15 @@ export function Detail({
           )}
         />
         {filed && (
-          <div className="button-line">
+          <div className="button-line detail-actions-row">
             <button
               type="button"
               className="secondary"
-              onClick={openManualAction}
+              disabled={deletingDoc}
+              onClick={() => {
+                setConfirmingDelete(false);
+                openManualAction();
+              }}
             >
               <Plus size={17} aria-hidden="true" />
               {t("addAnAction")}
@@ -694,12 +734,95 @@ export function Detail({
               <button
                 type="button"
                 className="link-button"
+                disabled={deletingDoc}
                 onClick={() => undo(doc)}
               >
                 {t("undoFiling")}
               </button>
             )}
+            {remove && (
+              <button
+                ref={deleteTriggerRef}
+                type="button"
+                className="link-button danger-link detail-delete-trigger"
+                disabled={busy || deletingDoc}
+                aria-expanded={confirmingDelete}
+                onClick={() => {
+                  setAdding(false);
+                  setConfirmingDelete((v) => !v);
+                }}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                {t("deleteDocument")}
+              </button>
+            )}
           </div>
+        )}
+        {filed && confirmingDelete && remove && (
+          <section
+            className="delete-confirm"
+            role="region"
+            aria-labelledby={deleteHeadingId}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && !deletingDoc) {
+                e.stopPropagation();
+                setConfirmingDelete(false);
+                requestAnimationFrame(() =>
+                  deleteTriggerRef.current?.focus({ preventScroll: true }),
+                );
+              }
+            }}
+          >
+            <div className="delete-confirm-copy">
+              <AlertTriangle size={18} aria-hidden="true" />
+              <div>
+                <strong id={deleteHeadingId}>
+                  {t("deleteDocumentConfirmHeading", { title: doc.title })}
+                </strong>
+                <p>
+                  {actions.length > 0
+                    ? t("deleteDocumentConfirmWithActions", {
+                        count: actions.length,
+                      })
+                    : t("deleteDocumentConfirmBody")}
+                </p>
+              </div>
+            </div>
+            <div className="button-line">
+              <button
+                ref={cancelDeleteRef}
+                type="button"
+                className="secondary"
+                disabled={deletingDoc}
+                onClick={() => {
+                  setConfirmingDelete(false);
+                  requestAnimationFrame(() =>
+                    deleteTriggerRef.current?.focus({ preventScroll: true }),
+                  );
+                }}
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                className="danger-btn"
+                disabled={busy || deletingDoc}
+                onClick={async () => {
+                  if (deletingDoc) return;
+                  setDeletingDoc(true);
+                  const ok = await remove(doc);
+                  if (!ok) {
+                    setDeletingDoc(false);
+                  }
+                }}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                {deletingDoc
+                  ? t("deletingDocument")
+                  : t("confirmDeleteDocument")}
+              </button>
+            </div>
+          </section>
         )}
         {adding && (filed || showSuggestion) && (
           <form

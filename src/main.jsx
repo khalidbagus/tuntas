@@ -18,6 +18,7 @@ import {
   Folder,
   WifiOff,
   Globe,
+  User,
 } from "lucide-react";
 import "@fontsource-variable/space-grotesk";
 import "@fontsource-variable/plus-jakarta-sans";
@@ -25,22 +26,57 @@ import "./style.css";
 import {
   Home,
   Library,
-  Actions,
   InboxPage,
-  Heading,
   Empty,
   navTo,
   pathFor,
 } from "./ui.jsx";
+import { Actions } from "./actions-view.jsx";
+import { AccountPage } from "./account-view.jsx";
 import { Capture, Detail } from "./forms.jsx";
 import {
   snapshot,
   change,
+  deleteDocument,
   addAction,
   toggleAction,
+  updateAction,
+  createGroup,
+  renameGroup,
+  deleteGroup,
+  addDependency,
+  removeDependency,
   ensureDemoSeeded,
+  setActiveWorkspaceUid,
+  getSyncMeta,
+  setSyncMeta,
+  getLocalWorkspaceSummary,
+  importLocalWorkspaceIntoCurrent,
 } from "./db.js";
+import {
+  msUntilNextLocalMidnight,
+  toLocalIsoDate,
+} from "./actions-domain.js";
 import { isDemoMode, exitDemoHref, LOCAL_RECEIPT_SOURCE } from "./demo.js";
+import { firebaseAuthConfigured } from "./firebase-settings.js";
+import {
+  observeAuth,
+  signInEmail,
+  signUpEmail,
+  signInWithGoogle,
+  requestPasswordReset,
+  resendVerificationEmail,
+  reloadCurrentUser,
+  signOutAccount,
+  mapAuthError,
+} from "./auth.js";
+import {
+  checkRemoteSyncEnabled,
+  enableProgressSync,
+  disableProgressSync,
+  runSyncCycle,
+  subscribeProgressSync,
+} from "./sync.js";
 import {
   configured,
   localClassifier,
@@ -62,17 +98,55 @@ const items = [
   ["library", "navLibrary", LibraryBig],
   ["actions", "navActions", ListChecks],
 ];
+const defaultSyncMeta = {
+  enabled: false,
+  status: "off",
+  lastSyncedAt: null,
+  lastError: "",
+  localImportedAt: null,
+  pendingCount: 0,
+};
+const defaultLocalSummary = {
+  totalDocs: 0,
+  totalActions: 0,
+  totalGroups: 0,
+  unimportedDocs: 0,
+  unimportedActions: 0,
+  unimportedGroups: 0,
+};
+const snapshotUser = (u) =>
+  u
+    ? {
+        uid: u.uid,
+        email: u.email || "",
+        emailVerified: Boolean(u.emailVerified),
+        displayName: u.displayName || "",
+        providerData: Array.isArray(u.providerData) ? [...u.providerData] : [],
+      }
+    : null;
 const readRoute = () => location.hash.slice(1) || "/home";
 function App() {
   const [lang, setLang] = useState(() => loadLang());
   const t = createTranslator(lang);
   const [route, setRoute] = useState(readRoute),
-    [data, setData] = useState({ docs: [], actions: [] }),
+    [data, setData] = useState({
+      docs: [],
+      actions: [],
+      groups: [],
+      dependencies: [],
+    }),
+    [todayIso, setTodayIso] = useState(() => toLocalIsoDate()),
     [loaded, setLoaded] = useState(false),
     [loadFailed, setLoadFailed] = useState(false),
     [notice, setNotice] = useState(null),
     [busy, setBusy] = useState(""),
-    running = useRef(false);
+    [user, setUser] = useState(null),
+    [syncMeta, setSyncMeta] = useState(defaultSyncMeta),
+    [remoteSyncDetected, setRemoteSyncDetected] = useState(false),
+    [localSummary, setLocalSummary] = useState(defaultLocalSummary),
+    running = useRef(false),
+    userRef = useRef(null),
+    syncUnsubRef = useRef(null);
   const demoMode = isDemoMode();
   const hasLocalReceipts = demoMode && data.docs.some(
     (doc) => doc.source === LOCAL_RECEIPT_SOURCE,
@@ -96,7 +170,13 @@ function App() {
     activeItem = items.find(([p]) => p === page),
     active = activeItem
       ? t(activeItem[1])
-      : t({ capture: "pageCapture", document: "pageDocument" }[page] || "pageFallback");
+      : t(
+          {
+            capture: "pageCapture",
+            document: "pageDocument",
+            account: "pageAccount",
+          }[page] || "pageFallback",
+        );
   const doc = data.docs.find((d) => d.id === id);
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -105,28 +185,141 @@ function App() {
   useEffect(() => {
     setConsent(false);
   }, [kind, file, text, mode]);
-  const refresh = async () => {
+  const refresh = async (uidOverride) => {
+    const uid =
+      uidOverride !== undefined
+        ? uidOverride
+        : demoMode
+          ? ""
+          : userRef.current?.uid || "";
     setData(await snapshot());
+    if (!demoMode && uid) {
+      const [meta, summary] = await Promise.all([
+        getSyncMeta(uid),
+        getLocalWorkspaceSummary(uid),
+      ]);
+      setSyncMeta(meta);
+      setLocalSummary(summary);
+    } else {
+      setSyncMeta(defaultSyncMeta);
+      setLocalSummary(defaultLocalSummary);
+    }
     setLoaded(true);
+  };
+  const syncAfterWrite = async () => {
+    if (demoMode) return;
+    const uid = userRef.current?.uid || "";
+    if (!uid) return;
+    const meta = await getSyncMeta(uid);
+    setSyncMeta(meta);
+    if (meta.enabled) {
+      const next = await runSyncCycle(uid);
+      if (next && userRef.current?.uid === uid) {
+        setSyncMeta(next);
+        setData(await snapshot());
+        setLocalSummary(await getLocalWorkspaceSummary(uid));
+      }
+    }
+  };
+  const attachSyncSubscription = (uid, isAlive) => {
+    syncUnsubRef.current?.();
+    syncUnsubRef.current = subscribeProgressSync(uid, async (updatedMeta) => {
+      if (!isAlive() || userRef.current?.uid !== uid) return;
+      if (updatedMeta) setSyncMeta(updatedMeta);
+      setData(await snapshot());
+      setLocalSummary(await getLocalWorkspaceSummary(uid));
+    });
   };
   const say = (message, bad = false) => setNotice({ message, bad });
   useEffect(() => {
-    (async () => {
+    let alive = true;
+    let authUnsub = () => {};
+    const detachSync = () => {
+      syncUnsubRef.current?.();
+      syncUnsubRef.current = null;
+    };
+    const activateUid = async (nextUser) => {
+      const nextUid = demoMode ? "" : nextUser?.uid || "";
+      const prevUid = userRef.current?.uid || "";
+      if (prevUid !== nextUid) detachSync();
+      userRef.current = demoMode ? null : snapshotUser(nextUser);
+      setUser(userRef.current);
+      setActiveWorkspaceUid(nextUid);
+      setRemoteSyncDetected(false);
+
+      if (!alive) return;
       if (demoMode) await ensureDemoSeeded();
-      await refresh();
-    })().catch(() => {
-      setLoadFailed(true);
-      say(
-        "Browser storage is unavailable. Allow site storage and reload.",
-        true,
-      );
-    });
+      await refresh(nextUid);
+      if (!alive) return;
+
+      if (!demoMode && nextUid) {
+        const currentMeta = await getSyncMeta(nextUid);
+        if (!alive || userRef.current?.uid !== nextUid) return;
+        if (currentMeta.enabled) {
+          attachSyncSubscription(nextUid, () => alive);
+          if (navigator.onLine) {
+            const synced = await runSyncCycle(nextUid);
+            if (alive && userRef.current?.uid === nextUid && synced) {
+              setSyncMeta(synced);
+              await refresh(nextUid);
+            }
+          }
+        } else if (navigator.onLine) {
+          const remoteEnabled = await checkRemoteSyncEnabled(nextUid);
+          if (alive && userRef.current?.uid === nextUid) {
+            setRemoteSyncDetected(remoteEnabled);
+          }
+        }
+      }
+    };
+
+    if (demoMode || !firebaseAuthConfigured) {
+      activateUid(null).catch(() => {
+        if (!alive) return;
+        setLoadFailed(true);
+        say(
+          "Browser storage is unavailable. Allow site storage and reload.",
+          true,
+        );
+      });
+    } else {
+      authUnsub = observeAuth((nextUser) => {
+        if (!alive) return;
+        activateUid(nextUser).catch(() => {
+          if (!alive) return;
+          setLoadFailed(true);
+          say(
+            "Browser storage is unavailable. Allow site storage and reload.",
+            true,
+          );
+        });
+      });
+    }
+
     const update = () => {
       setRoute(readRoute());
       setConsent(false);
       window.scrollTo(0, 0);
     };
-    const net = () => setOnline(navigator.onLine),
+    const net = async () => {
+        const isOnline = navigator.onLine;
+        setOnline(isOnline);
+        const uid = demoMode ? "" : userRef.current?.uid || "";
+        if (isOnline && uid) {
+          try {
+            const meta = await getSyncMeta(uid);
+            if (meta.enabled && alive && userRef.current?.uid === uid) {
+              const next = await runSyncCycle(uid);
+              if (next && alive && userRef.current?.uid === uid) {
+                setSyncMeta(next);
+                await refresh(uid);
+              }
+            }
+          } catch {
+            // Sync failure reflected via syncMeta state.
+          }
+        }
+      },
       key = (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
           e.preventDefault();
@@ -141,10 +334,35 @@ function App() {
     window.addEventListener("offline", net);
     window.addEventListener("keydown", key);
     return () => {
+      alive = false;
+      authUnsub();
+      detachSync();
       window.removeEventListener("hashchange", update);
       window.removeEventListener("keydown", key);
       window.removeEventListener("online", net);
       window.removeEventListener("offline", net);
+    };
+  }, []);
+  useEffect(() => {
+    let timerId;
+    const syncDate = () => {
+      const next = toLocalIsoDate();
+      setTodayIso((prev) => (prev === next ? prev : next));
+    };
+    const scheduleMidnight = () => {
+      clearTimeout(timerId);
+      timerId = setTimeout(() => {
+        syncDate();
+        scheduleMidnight();
+      }, msUntilNextLocalMidnight());
+    };
+    scheduleMidnight();
+    window.addEventListener("focus", syncDate);
+    document.addEventListener("visibilitychange", syncDate);
+    return () => {
+      clearTimeout(timerId);
+      window.removeEventListener("focus", syncDate);
+      document.removeEventListener("visibilitychange", syncDate);
     };
   }, []);
   useEffect(() => {
@@ -233,6 +451,7 @@ function App() {
             : "Original saved. Check the suggested details.",
         result.status === "error",
       );
+      syncAfterWrite().catch(() => {});
     } catch (e) {
       if (!existing) setFile(null);
       say(
@@ -264,6 +483,7 @@ function App() {
       await fn();
       await refresh();
       if (message) say(message);
+      syncAfterWrite().catch(() => {});
       return true;
     } catch {
       say("The change could not be saved. Try again.", true);
@@ -319,19 +539,53 @@ function App() {
           <nav aria-label={t("mainNav")}>{items.map((args) => nav(...args))}</nav>
           {captureLink}
         </div>
-        <div className="local-profile">
-          <span className="soft-icon">
-            <Monitor size={19} aria-hidden="true" />
-          </span>
-          <div>
-            <strong>
-              {demoMode ? t("sampleWorkspace") : t("localWorkspace")}
-            </strong>
-            <small>
-              {demoMode ? t("sampleDataIsolated") : t("thisBrowserOnly")}
-            </small>
+        {demoMode ? (
+          <div className="local-profile">
+            <span className="soft-icon">
+              <Monitor size={19} aria-hidden="true" />
+            </span>
+            <div>
+              <strong>{t("sampleWorkspace")}</strong>
+              <small>{t("sampleDataIsolated")}</small>
+            </div>
           </div>
-        </div>
+        ) : (
+          <a
+            href="#/account"
+            aria-current={page === "account" ? "page" : undefined}
+            className={
+              "local-profile account-rail-link" +
+              (page === "account" ? " selected" : "")
+            }
+          >
+            <span className="soft-icon">
+              {user ? (
+                <User size={19} aria-hidden="true" />
+              ) : (
+                <Monitor size={19} aria-hidden="true" />
+              )}
+            </span>
+            <div>
+              <strong>
+                {user ? user.email || t("navAccount") : t("localWorkspace")}
+              </strong>
+              <small>
+                {user
+                  ? syncMeta.enabled
+                    ? syncMeta.status === "failed"
+                      ? t("syncStatusFailed")
+                      : syncMeta.status === "pending" ||
+                          syncMeta.pendingCount > 0
+                        ? t("syncStatusPending")
+                        : t("syncStatusSynced")
+                    : t("accountRailSignedInSub")
+                  : firebaseAuthConfigured
+                    ? t("accountRailSignInHint")
+                    : t("thisBrowserOnly")}
+              </small>
+            </div>
+          </a>
+        )}
       </aside>
       <div className="shell">
         <header className="top">
@@ -361,6 +615,35 @@ function App() {
                 ))}
               </select>
             </label>
+            {!demoMode && (
+              <a
+                href="#/account"
+                aria-current={page === "account" ? "page" : undefined}
+                className={
+                  "account-short" + (page === "account" ? " selected" : "")
+                }
+                title={user ? user.email || t("navAccount") : t("navAccount")}
+              >
+                <User size={16} aria-hidden="true" />
+                <span>
+                  {user ? user.email || t("navAccount") : t("navAccount")}
+                </span>
+                {user && syncMeta.enabled && (
+                  <i
+                    aria-hidden="true"
+                    className={
+                      "sync-dot" +
+                      (syncMeta.status === "failed"
+                        ? " failed"
+                        : syncMeta.status === "pending" ||
+                            syncMeta.pendingCount > 0
+                          ? " pending"
+                          : "")
+                    }
+                  />
+                )}
+              </a>
+            )}
             <button
               type="button"
               onClick={goSearch}
@@ -432,6 +715,7 @@ function App() {
           ) : page === "home" ? (
             <Home
               {...data}
+              todayIso={todayIso}
               demo={demoMode}
               busy={!!busy}
               onSample={() =>
@@ -489,7 +773,50 @@ function App() {
           ) : page === "actions" ? (
             <Actions
               {...data}
-              onToggle={(id) => mutation(() => toggleAction(id))}
+              todayIso={todayIso}
+              focusedActionId={id || ""}
+              onToggle={(action) =>
+                mutation(() => toggleAction(action.id))
+              }
+              onUpdateAction={(actionId, fields, msg) =>
+                mutation(() => updateAction(actionId, fields), msg)
+              }
+              onCreateGroup={(groupTitle) =>
+                mutation(() => createGroup(groupTitle), "Group created.")
+              }
+              onRenameGroup={(groupId, groupTitle) =>
+                mutation(
+                  () => renameGroup(groupId, groupTitle),
+                  "Group renamed.",
+                )
+              }
+              onDeleteGroup={(groupId) =>
+                mutation(
+                  () => deleteGroup(groupId),
+                  "Group removed. Actions kept.",
+                )
+              }
+              onAddDependency={async (prereqId, depId) => {
+                try {
+                  await addDependency(prereqId, depId);
+                  await refresh();
+                  say("Connection added.");
+                  syncAfterWrite().catch(() => {});
+                  return { ok: true };
+                } catch (e) {
+                  return {
+                    ok: false,
+                    error:
+                      e?.message || "The change could not be saved. Try again.",
+                  };
+                }
+              }}
+              onRemoveDependency={(depId) =>
+                mutation(
+                  () => removeDependency(depId),
+                  "Connection removed.",
+                )
+              }
             />
           ) : page === "document" && doc ? (
             <Detail
@@ -511,6 +838,20 @@ function App() {
                   "Moved to Inbox. Original kept.",
                 )
               }
+              remove={async (d) => {
+                try {
+                  await deleteDocument(d.id);
+                  navTo("/library");
+                  setRoute("/library");
+                  await refresh();
+                  say("Document deleted.");
+                  syncAfterWrite().catch(() => {});
+                  return true;
+                } catch {
+                  say("The document could not be deleted. Try again.", true);
+                  return false;
+                }
+              }}
               retry={(d) => work({ existing: d })}
               add={async (docId, actionTitle, due, opts) => {
                 try {
@@ -521,6 +862,7 @@ function App() {
                       ? "Added to Actions."
                       : "Follow-up already saved in Actions.",
                   );
+                  syncAfterWrite().catch(() => {});
                   return true;
                 } catch {
                   say("The change could not be saved. Try again.", true);
@@ -533,6 +875,113 @@ function App() {
                   "Follow-up draft dismissed.",
                 )
               }
+            />
+          ) : page === "account" ? (
+            <AccountPage
+              demo={demoMode}
+              authConfigured={firebaseAuthConfigured}
+              user={user}
+              online={online}
+              syncMeta={syncMeta}
+              remoteSyncDetected={remoteSyncDetected}
+              localSummary={localSummary}
+              onGoogleSignIn={async () => {
+                try {
+                  await signInWithGoogle();
+                  return { ok: true };
+                } catch (e) {
+                  return { ok: false, errorKey: mapAuthError(e) };
+                }
+              }}
+              onEmailSignIn={async (em, pw) => {
+                try {
+                  await signInEmail(em, pw);
+                  return { ok: true };
+                } catch (e) {
+                  return { ok: false, errorKey: mapAuthError(e) };
+                }
+              }}
+              onEmailSignUp={async (em, pw) => {
+                try {
+                  await signUpEmail(em, pw);
+                  return { ok: true };
+                } catch (e) {
+                  return { ok: false, errorKey: mapAuthError(e) };
+                }
+              }}
+              onPasswordReset={async (em) => {
+                try {
+                  await requestPasswordReset(em);
+                  return { ok: true };
+                } catch (e) {
+                  return { ok: false, errorKey: mapAuthError(e) };
+                }
+              }}
+              onResendVerification={async () => {
+                try {
+                  await resendVerificationEmail();
+                  say(t("resendVerification"));
+                } catch (e) {
+                  say(t(mapAuthError(e)), true);
+                }
+              }}
+              onRefreshVerification={async () => {
+                try {
+                  const refreshed = await reloadCurrentUser();
+                  if (refreshed) {
+                    const snap = snapshotUser(refreshed);
+                    userRef.current = snap;
+                    setUser(snap);
+                  }
+                } catch (e) {
+                  say(t(mapAuthError(e)), true);
+                }
+              }}
+              onSignOut={async () => {
+                syncUnsubRef.current?.();
+                syncUnsubRef.current = null;
+                await signOutAccount();
+              }}
+              onEnableSync={async ({ importLocal = false } = {}) => {
+                const uid = userRef.current?.uid;
+                if (!uid) return;
+                try {
+                  if (importLocal) {
+                    await importLocalWorkspaceIntoCurrent(uid);
+                  }
+                  const next = await enableProgressSync(uid);
+                  if (next) setSyncMeta(next);
+                  attachSyncSubscription(uid, () => userRef.current?.uid === uid);
+                  setRemoteSyncDetected(false);
+                  await refresh(uid);
+                } catch (e) {
+                  setSyncMeta(await getSyncMeta(uid));
+                  say(e?.message || t("syncStatusFailed"), true);
+                }
+              }}
+              onDisableSync={async () => {
+                const uid = userRef.current?.uid;
+                if (!uid) return;
+                syncUnsubRef.current?.();
+                syncUnsubRef.current = null;
+                await disableProgressSync(uid);
+                await refresh(uid);
+              }}
+              onSyncNow={async () => {
+                const uid = userRef.current?.uid;
+                if (!uid) return;
+                const next = await runSyncCycle(uid);
+                if (next) setSyncMeta(next);
+                await refresh(uid);
+              }}
+              onImportLocal={async () => {
+                const uid = userRef.current?.uid;
+                if (!uid) return;
+                await importLocalWorkspaceIntoCurrent(uid);
+                const next = await runSyncCycle(uid);
+                if (next) setSyncMeta(next);
+                await refresh(uid);
+              }}
             />
           ) : (
             <Empty title={t("pageNotFound")}>

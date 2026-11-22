@@ -512,30 +512,30 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
   const workspace = page.getByRole("region", { name: "Workspace overview" });
   await expect(
     workspace.getByRole("link", { name: /^Inbox/ }),
-  ).toContainText("1");
+  ).toHaveAccessibleName(/Inbox.*\b2$/);
   await expect(
     workspace.getByRole("link", { name: /^Library/ }),
-  ).toContainText("8");
+  ).toHaveAccessibleName(/Library.*\b12$/);
   await expect(
     workspace.getByRole("link", { name: /^Actions/ }),
-  ).toContainText("2");
+  ).toHaveAccessibleName(/Actions.*\b7$/);
 
   // Reloading after concurrent multi-tab open keeps seeded counts unchanged.
   await page.reload();
   await expect(
     workspace.getByRole("link", { name: /^Inbox/ }),
-  ).toContainText("1");
+  ).toHaveAccessibleName(/Inbox.*\b2$/);
   await expect(
     workspace.getByRole("link", { name: /^Library/ }),
-  ).toContainText("8");
+  ).toHaveAccessibleName(/Library.*\b12$/);
   await expect(
     workspace.getByRole("link", { name: /^Actions/ }),
-  ).toContainText("2");
+  ).toHaveAccessibleName(/Actions.*\b7$/);
 
-  // Tab 2 sees the same 8 filed documents in Library with zero duplicates.
+  // Tab 2 sees the same filed documents in Library with zero duplicates.
   await tab2.getByRole("link", { name: "Library", exact: true }).first().click();
   await expect(tab2).toHaveURL(/\?demo=1#\/library$/);
-  await expect(tab2.getByText("8 documents")).toBeVisible();
+  await expect(tab2.getByText("12 documents")).toBeVisible();
   await tab2.close();
 
   // Demo mode stays active across Inbox, Library, Document Detail, Actions, and Capture.
@@ -543,7 +543,7 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
   await expect(page).toHaveURL(/\?demo=1#\/inbox$/);
   await page.getByRole("link", { name: "Library", exact: true }).first().click();
   await expect(page).toHaveURL(/\?demo=1#\/library$/);
-  await expect(page.getByText("8 documents")).toBeVisible();
+  await expect(page.getByText("12 documents")).toBeVisible();
 
   // Verify all four redacted receipt photos are labeled, searchable by total, and open cleanly.
   for (const [title, total] of [
@@ -567,7 +567,7 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
     await page.getByRole("link", { name: "Library", exact: true }).first().click();
   }
   await page.getByLabel("Search documents").fill("");
-  await expect(page.getByText("8 documents")).toBeVisible();
+  await expect(page.getByText("12 documents")).toBeVisible();
 
   await page
     .getByRole("link", { name: /Household membership renewal notice/ })
@@ -577,7 +577,7 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
 
   await page.getByRole("link", { name: "Actions", exact: true }).first().click();
   await expect(page).toHaveURL(/\?demo=1#\/actions$/);
-  await expect(page.getByRole("checkbox")).toHaveCount(3);
+  await expect(page.getByRole("checkbox")).toHaveCount(9);
 
   await page.getByRole("link", { name: "Capture", exact: true }).first().click();
   await expect(page).toHaveURL(/\?demo=1#\/capture$/);
@@ -654,6 +654,11 @@ test("demo mode: phone 390px discoverability, 320px reflow, Inbox review, Librar
   await expect(page.getByText("Filed in Library", { exact: true })).toBeVisible();
 
   await page.locator(".bottom-nav").getByRole("link", { name: /^Inbox/ }).click();
+  await page.getByRole("link", { name: /Courtyard room booking note/ }).click();
+  await page.getByLabel("Primary category").selectOption("Home & Living");
+  await page.getByRole("button", { name: "Confirm & file" }).click();
+  await expect(page.getByText("Filed in Library", { exact: true })).toBeVisible();
+  await page.locator(".bottom-nav").getByRole("link", { name: /^Inbox/ }).click();
   await expect(page.getByText("You’re all caught up.")).toBeVisible();
 
   // Search Library by merchant and amount, then inspect original.
@@ -672,7 +677,7 @@ test("demo mode: phone 390px discoverability, 320px reflow, Inbox review, Librar
   // Inspect Actions (open + completed) and open original from Actions.
   await page.locator(".bottom-nav").getByRole("link", { name: "Actions" }).click();
   await expect(
-    page.getByRole("checkbox", { name: "Complete Renew household membership" }),
+    page.getByRole("checkbox", { name: "Complete Submit renewal" }),
   ).toBeVisible();
   await expect(page.getByText(/Due Dec 12, 2026/)).toBeVisible();
   await expect(
@@ -688,6 +693,7 @@ test("demo mode: phone 390px discoverability, 320px reflow, Inbox review, Librar
 
   await page
     .getByRole("link", { name: "Household membership renewal notice" })
+    .first()
     .click();
   await page.getByText("Original document", { exact: true }).click();
   await expect(page.locator(".original pre")).toContainText(
@@ -703,7 +709,7 @@ test("Explore demo from empty Home and keep existing personal workspace isolated
   await expect(page).toHaveURL(/\?demo=1#\/home$/);
   await expect(page.getByText("Sample workspace").first()).toBeVisible();
 
-  await page.getByRole("link", { name: "Exit demo" }).click();
+  await page.getByRole("link", { name: "Exit demo" }).first().click();
   await expect(page).toHaveURL(/\/#\/home$/);
   await expect(page.getByText("Your first document goes here.")).toBeVisible();
 
@@ -723,7 +729,7 @@ test("Explore demo from empty Home and keep existing personal workspace isolated
   await page.getByRole("button", { name: "Confirm & file" }).click();
   await expect(page.getByText("Filed in Library", { exact: true })).toBeVisible();
 
-  await page.getByRole("link", { name: "Exit demo" }).click();
+  await page.getByRole("link", { name: "Exit demo" }).first().click();
   await expect(page).toHaveURL(/\/#\/home$/);
   await page.getByRole("link", { name: "Library", exact: true }).first().click();
   await expect(page.getByText("1 document", { exact: true })).toBeVisible();
@@ -740,7 +746,7 @@ test("Explore demo from empty Home and keep existing personal workspace isolated
     page.getByRole("link", { name: /Personal garage lease/ }),
   ).toBeVisible();
 });
-test("demo mode: already-seeded demo receives redacted receipts without losing edits", async ({
+test("demo mode: already-seeded demo receives new examples without losing edits", async ({
   page,
 }) => {
   // Simulate an existing visitor who already has demo-seed-v1 and an edited title, before demo-redacted-receipts-v1 existed.
@@ -796,11 +802,14 @@ test("demo mode: already-seeded demo receives redacted receipts without losing e
   );
 
   await page.goto("/?demo=1#/library");
-  await expect(page.getByText("5 documents")).toBeVisible();
+  await expect(page.getByText("9 documents")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Custom edited renewal/ }),
   ).toBeVisible();
   for (const title of [
+    "Cedarbridge workshop invoice",
+    "Birchline policy confirmation",
+    "Undangan pengarahan relawan",
     "Restaurant dinner receipt",
     "Ice cream counter receipt",
     "Rice bowl takeaway bill",
@@ -811,8 +820,16 @@ test("demo mode: already-seeded demo receives redacted receipts without losing e
     ).toBeVisible();
   }
 
+  await page.goto("/?demo=1#/actions");
+  const group = page.getByRole("region", { name: "Training reimbursement" });
+  await expect(group.getByText("1 of 4 steps completed")).toBeVisible();
+  await group.getByRole("checkbox", { name: "Complete Check workshop invoice" }).click();
+  await expect(group.getByText("2 of 4 steps completed")).toBeVisible();
   await page.reload();
-  await expect(page.getByText("5 documents")).toBeVisible();
+  await expect(group.getByText("2 of 4 steps completed")).toBeVisible();
+
+  await page.goto("/?demo=1#/library");
+  await expect(page.getByText("9 documents")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Custom edited renewal/ }),
   ).toBeVisible();
@@ -925,4 +942,664 @@ test("language picker: EN -> Bahasa Indonesia -> EN on same receipt, persistence
     page.getByRole("heading", { name: "Filing details" }),
   ).toBeVisible();
   await expect(page).toHaveURL(/\?demo=1#\/document\/demo-doc-redacted-receipt-1$/);
+});
+
+test("Enhancement A: illustrated Library category tiles, combined search, artwork fallback, and 360px mobile layout", async ({
+  page,
+}) => {
+  await page.goto("/?demo=1#/library");
+  const picker = page.getByRole("group", { name: "Browse by category" });
+  const tiles = picker.getByRole("button");
+  await expect(tiles).toHaveCount(7);
+  await expect(picker.getByRole("button", { name: /All Documents/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(picker.getByRole("button", { name: /Purchases/ })).toContainText("5");
+  await expect(picker.getByRole("button", { name: /Home & Living/ })).toContainText("2");
+  for (const category of ["Money & Bills", "Personal Records", "Other"]) {
+    await expect(picker.getByRole("button", { name: new RegExp(category) })).toContainText("1");
+  }
+
+  // Confirm artwork images loaded with real dimensions.
+  const loadedCount = await picker.locator("img").evaluateAll((imgs) =>
+    imgs.filter((img) => img.complete && img.naturalWidth > 0).length,
+  );
+  expect(loadedCount).toBe(7);
+
+  // Combine category filter and search query, then reset category while keeping query.
+  await picker.getByRole("button", { name: /Purchases/ }).click();
+  await expect(page.getByText("5 documents")).toBeVisible();
+  await page.getByLabel("Search documents").fill("184.000");
+  await expect(page.getByText("1 document", { exact: true })).toBeVisible();
+  await picker.getByRole("button", { name: /Home & Living/ }).click();
+  await expect(page.getByText("No matching documents")).toBeVisible();
+  await picker.getByRole("button", { name: /All Documents/ }).click();
+  await expect(page.getByLabel("Search documents")).toHaveValue("184.000");
+  await expect(page.getByText("1 document", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await expect(page.getByText("12 documents")).toBeVisible();
+
+  await picker.getByRole("button", { name: /Home & Living/ }).click();
+  await page.getByLabel("Search documents").fill("184.000");
+  await expect(page.getByText("No matching documents")).toBeVisible();
+  await page.getByRole("button", { name: "Clear search and filters" }).click();
+  await expect(page.getByText("12 documents")).toBeVisible();
+  await expect(picker.getByRole("button", { name: /All Documents/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  // Artwork fallback and narrow 360px Samsung Chrome viewport check.
+  await page.route("**/categories/category-purchases.png", (route) => route.abort());
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.reload();
+  await expect(picker.getByRole("button", { name: /Purchases/ })).toBeVisible();
+  await expect(picker.locator(".category-art-fallback")).toHaveCount(1);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
+test("Enhancements B & I: urgency states, completed vs overdue, missing-date review, add/edit/remove due date", async ({
+  page,
+}) => {
+  await sample(page);
+  await page.getByRole("button", { name: "Add an action" }).click();
+  await page.getByLabel("Action title").fill("Overdue follow-up");
+  const { yesterdayIso, todayIso, soonIso } = await page.evaluate(() => {
+    const fmt = (offset) => {
+      const d = new Date();
+      d.setDate(d.getDate() + offset);
+      return [
+        String(d.getFullYear()).padStart(4, "0"),
+        String(d.getMonth() + 1).padStart(2, "0"),
+        String(d.getDate()).padStart(2, "0"),
+      ].join("-");
+    };
+    return { yesterdayIso: fmt(-1), todayIso: fmt(0), soonIso: fmt(3) };
+  });
+  await page.getByLabel(/Due date/).fill(yesterdayIso);
+  await page.getByRole("button", { name: "Create action" }).click();
+  await expect(page.getByLabel("Action title")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Add an action" }).click();
+  await page.getByLabel("Action title").fill("Undated follow-up");
+  await page.getByRole("button", { name: "Create action" }).click();
+
+  await page.getByRole("link", { name: "Actions", exact: true }).first().click();
+  const overdueCard = page.locator(".action-card", { hasText: "Overdue follow-up" });
+  await expect(overdueCard.locator(".urgency-badge")).toHaveText("Overdue");
+
+  // Completing an overdue action replaces Overdue with Completed.
+  await page.getByRole("checkbox", { name: "Complete Overdue follow-up" }).click();
+  await expect(overdueCard.locator(".urgency-badge")).toHaveText("Completed");
+
+  // Filter by No Due Date, add a due date, edit it, and remove it.
+  await page.getByRole("button", { name: /No Due Date/ }).click();
+  await expect(page.locator(".action-card")).toHaveCount(1);
+  const undatedCard = page.locator(".action-card", { hasText: "Undated follow-up" });
+  await expect(undatedCard.locator(".urgency-badge")).toHaveText("No Due Date");
+
+  await undatedCard.getByRole("button", { name: "Details" }).click();
+  await expect(undatedCard.getByText(/No source excerpt was recorded/)).toBeVisible();
+  await undatedCard.getByLabel("Due date").fill(todayIso);
+  await undatedCard.getByRole("button", { name: "Save date" }).click();
+  await page.getByRole("button", { name: /^All/ }).click();
+  await expect(undatedCard.locator(".urgency-badge")).toHaveText("Due Today");
+
+  await page.reload();
+  const reloadedCard = page.locator(".action-card", { hasText: "Undated follow-up" });
+  await expect(reloadedCard.locator(".urgency-badge")).toHaveText("Due Today");
+
+  await reloadedCard.getByRole("button", { name: "Details" }).click();
+  await reloadedCard.getByLabel("Due date").fill(soonIso);
+  await reloadedCard.getByRole("button", { name: "Save date" }).click();
+  await expect(reloadedCard.locator(".urgency-badge")).toHaveText("Due Soon");
+  await reloadedCard.getByRole("button", { name: "Remove date" }).click();
+  await expect(reloadedCard.locator(".urgency-badge")).toHaveText("No Due Date");
+});
+
+test("Enhancements C, D, E, G, H: connected demo workflow, progress, cycle prevention, graph, and override", async ({
+  page,
+}) => {
+  await page.goto("/?demo=1#/actions/demo-action-renewal-address");
+
+  const renewalGroup = page.getByRole("region", {
+    name: "Household membership renewal",
+  });
+  await expect(renewalGroup.getByText("0 of 3 steps completed")).toBeVisible();
+  await expect(
+    renewalGroup.getByRole("progressbar", {
+      name: /0 of 3 steps completed/,
+    }),
+  ).toBeVisible();
+
+  // Evidence at a Glance on Prepare address proof.
+  const step1 = renewalGroup.locator(".action-card", {
+    hasText: "Prepare address proof",
+  });
+  await expect(step1.getByText("“Account: Northgrid Residential 418”")).toBeVisible();
+  await expect(step1.getByRole("link", { name: "Open original document" })).toHaveAttribute(
+    "href",
+    "#/document/demo-doc-utility",
+  );
+
+  // Cycle check: trying to make step1 depend on step3 (Verify confirmation) fails cleanly.
+  await step1.getByLabel("Add prerequisite").selectOption("demo-action-renewal-verify");
+  await step1.getByRole("button", { name: "Connect step" }).click();
+  await expect(step1.getByRole("alert")).toContainText("circular dependency");
+
+  // Waiting action shows advisory override when clicked; completing step1 makes step2 Ready.
+  const step2 = renewalGroup.locator("#action-card-demo-action-renewal");
+  await expect(step2).toContainText("Waiting on 1 step");
+  await page.getByRole("checkbox", { name: "Complete Submit renewal" }).click();
+  await expect(step2.getByText("This step is waiting on unfinished prerequisites:")).toBeVisible();
+  await step2.getByRole("button", { name: "Cancel" }).click();
+
+  await page.getByRole("checkbox", { name: "Complete Prepare address proof" }).click();
+  await expect(renewalGroup.getByText("1 of 3 steps completed")).toBeVisible();
+  await expect(step2).toContainText("Ready");
+
+  // Reopening step1 moves unfinished step2 back to Waiting; completed steps are never reversed.
+  await page.getByRole("checkbox", { name: "Reopen Prepare address proof" }).click();
+  await expect(step2).toContainText("Waiting on 1 step");
+  await expect(renewalGroup.getByText("0 of 3 steps completed")).toBeVisible();
+
+  await page.getByRole("checkbox", { name: "Complete Prepare address proof" }).click();
+  await expect(step2).toContainText("Ready");
+  await page.getByRole("checkbox", { name: "Complete Submit renewal" }).click();
+  await expect(renewalGroup.getByText("2 of 3 steps completed")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Reopen Prepare address proof" }).click();
+  await expect(
+    page.getByRole("checkbox", { name: "Reopen Submit renewal" }),
+  ).toBeChecked();
+
+  // Interactive dependency graph: open, select node, zoom, check text list, close.
+  await renewalGroup.getByRole("button", { name: "View connections" }).click();
+  const graph = renewalGroup.getByRole("region", {
+    name: /Connections · Household membership renewal/,
+  });
+  await expect(graph).toBeVisible();
+  await graph.getByRole("button", { name: /Verify confirmation/ }).first().click();
+  await expect(graph.locator(".graph-inspector")).toContainText("Verify confirmation");
+  await graph.getByRole("button", { name: "Zoom in" }).click();
+  await expect(graph.locator(".graph-zoom-value")).toHaveText("125%");
+  await graph.getByRole("button", { name: "Reset zoom" }).click();
+  await expect(graph.locator(".graph-zoom-value")).toHaveText("100%");
+  await expect(graph.locator(".graph-text-list")).toContainText("Prepare address proof");
+  await graph.getByRole("button", { name: "Hide connections" }).click();
+  await expect(graph).toHaveCount(0);
+
+  await page.reload();
+  await expect(renewalGroup.getByText("1 of 3 steps completed")).toBeVisible();
+});
+
+test("expanded demo: focus advances through two prerequisites and examples have usable originals", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date(2026, 10, 22, 12));
+  await page.goto("/?demo=1#/home");
+  const focus = page.getByRole("region", { name: "Today’s Focus" });
+  await expect(focus).toContainText("Check workshop invoice");
+  await expect(focus).toContainText("Overdue");
+  await focus.getByRole("link", { name: "Open action" }).click();
+  await expect(page).toHaveURL(/\?demo=1#\/actions\/demo-action-training-invoice$/);
+
+  const group = page.getByRole("region", { name: "Training reimbursement" });
+  const claim = group.locator("#action-card-demo-action-training-submit");
+  await expect(group.getByText("1 of 4 steps completed")).toBeVisible();
+  await expect(group.getByText("“Check the invoice total and reference before submitting your claim.”")).toBeVisible();
+  await expect(claim.locator(".urgency-badge")).toHaveText("Due Today");
+  await expect(claim).toContainText("Waiting on 1 step");
+  await group.getByRole("button", { name: "View connections" }).click();
+  const graph = group.getByRole("region", { name: "Connections · Training reimbursement" });
+  const relationships = graph.locator(".graph-text-list li");
+  await expect(relationships).toHaveCount(3);
+  for (const prerequisite of ["Save training approval", "Check workshop invoice"]) {
+    await expect(relationships.filter({ hasText: prerequisite })).toContainText(
+      "Submit reimbursement claim",
+    );
+  }
+  await graph.getByRole("button", { name: "Hide connections" }).click();
+  await group.getByRole("checkbox", { name: "Complete Check workshop invoice" }).click();
+  await expect(claim.locator(".readiness-chip")).toHaveText("Ready");
+  await page.goto("/?demo=1#/home");
+  await expect(focus).toContainText("Submit reimbursement claim");
+
+  await page.goto("/?demo=1#/library");
+  const picker = page.getByRole("group", { name: "Browse by category" });
+  await picker.getByRole("button", { name: /Personal Records/ }).click();
+  await page.getByLabel("Search documents").fill("BL-2048");
+  await page.getByRole("link", { name: /Birchline policy confirmation/ }).click();
+  await page.getByText("Original document", { exact: true }).click();
+  await expect(page.locator(".original pre")).toContainText("Policy reference: BL-2048");
+  const download = page.getByRole("link", { name: "Download original" });
+  await expect(download).toHaveAttribute("download", "birchline-policy-letter.pdf");
+  await expect(download).toHaveAttribute("href", /^blob:/);
+
+  await page.goto("/?demo=1#/document/demo-doc-volunteer-briefing");
+  await page.getByRole("button", { name: "Add follow-up" }).click();
+  await expect(page.getByLabel(/Due date/)).toHaveValue("");
+  await page.getByRole("button", { name: "Create action" }).click();
+  await page.goto("/?demo=1#/actions");
+  await page.getByRole("button", { name: /No Due Date/ }).click();
+  await expect(
+    page.getByRole("checkbox", { name: "Complete Konfirmasi kehadiran relawan" }),
+  ).toBeVisible();
+});
+
+test("v1 IndexedDB upgrade preserves records, personal/demo isolation holds for groups, and offline edits + Bahasa Indonesia pass WCAG AA", async ({
+  page,
+  context,
+}) => {
+  // Open demo mode first so tuntas-workspace-v1 has not been opened at v2 yet.
+  await page.goto("/?demo=1#/home");
+  await page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const req = indexedDB.open("tuntas-workspace-v1", 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          const docs = db.createObjectStore("documents", { keyPath: "id" });
+          docs.createIndex("digest", "digest", { unique: true });
+          db.createObjectStore("originals");
+          db.createObjectStore("actions", { keyPath: "id" });
+        };
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(["documents", "originals", "actions"], "readwrite");
+          tx.objectStore("documents").put({
+            id: "legacy-doc-1",
+            digest: "legacy-digest-1",
+            created: 1000,
+            status: "organized",
+            title: "Legacy water bill",
+            name: "legacy.txt",
+            mime: "text/plain",
+            size: 16,
+            source: "text",
+            sample: false,
+            category: "Money & Bills",
+            tags: [],
+            facts: [],
+            text: "Legacy water bill",
+            mode: "Local rules",
+            reason: "",
+            reviewed: true,
+            autoFiled: true,
+          });
+          tx.objectStore("originals").put(
+            { bytes: new TextEncoder().encode("Legacy water bill").buffer, type: "text/plain" },
+            "legacy-doc-1",
+          );
+          tx.objectStore("actions").put({
+            id: "legacy-action-1",
+            documentId: "legacy-doc-1",
+            title: "Pay legacy bill",
+            due: "",
+            done: false,
+            created: 2000,
+          });
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+
+  // Visit personal workspace so IndexedDB v1 -> v2 upgrade runs non-destructively.
+  await page.goto("/#/home");
+  await expect(page.getByRole("link", { name: /Legacy water bill/ }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Try sample" }).click();
+  await page.getByRole("button", { name: "Add follow-up" }).click();
+  await page.getByRole("button", { name: "Create action" }).click();
+
+  await page.getByRole("link", { name: "Actions", exact: true }).first().click();
+  await expect(page.getByText("Pay legacy bill")).toBeVisible();
+
+  await context.setOffline(true);
+  await page.getByRole("button", { name: "New group" }).click();
+  await page.getByLabel("Group name").fill("Personal offline checklist");
+  await page.getByRole("button", { name: "Create group" }).click();
+  const personalGroup = page.getByRole("region", { name: "Personal offline checklist" });
+  await expect(personalGroup).toBeVisible();
+
+  // Assign both personal actions (from two different documents) into the group and link them.
+  for (const title of ["Pay legacy bill", "Renew your membership"]) {
+    const card = page.locator(".action-card", { hasText: title });
+    await card.getByRole("button", { name: "Details" }).click();
+    await card.getByLabel(/group/i).selectOption({ label: "Personal offline checklist" });
+  }
+  const secondCard = personalGroup.locator(".action-card", {
+    has: page.getByRole("checkbox", { name: /Renew your membership/ }),
+  });
+  await secondCard.getByLabel("Add prerequisite").selectOption("legacy-action-1");
+  await secondCard.getByRole("button", { name: "Connect step" }).click();
+  await expect(secondCard).toContainText("Waiting on 1 step");
+
+  // Explicit override completes waiting step cleanly.
+  await page.getByRole("checkbox", { name: "Complete Renew your membership" }).click();
+  await secondCard.getByRole("button", { name: "Complete anyway" }).click();
+  await expect(
+    page.getByRole("checkbox", { name: "Reopen Renew your membership" }),
+  ).toBeChecked();
+
+  await context.setOffline(false);
+
+  // Personal groups must never appear in demo workspace.
+  await page.goto("/?demo=1#/actions");
+  await expect(page.getByText("Personal offline checklist")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Household membership renewal" })).toBeVisible();
+
+  // Check Bahasa Indonesia and axe WCAG A/AA across updated demo screens including Graph.
+  await page.getByLabel("Language").selectOption("id");
+  await expect(page.getByRole("button", { name: "Grup baru" })).toBeVisible();
+  for (const url of ["/?demo=1#/home", "/?demo=1#/library", "/?demo=1#/actions"]) {
+    if (!page.url().endsWith(url.replace("/?", "?"))) {
+      await page.goto(url);
+    }
+    if (url.endsWith("#/actions")) {
+      await page
+        .getByRole("region", { name: "Training reimbursement" })
+        .getByRole("button", { name: "Lihat keterkaitan" })
+        .click();
+    }
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(
+      violations.map((v) => ({
+        id: v.id,
+        nodes: v.nodes.map((n) => n.target),
+      })),
+    ).toEqual([]);
+  }
+});
+
+test("Home keeps Explore demo across empty/populated states and places Document capture above Recent documents", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Explore demo" })).toHaveCount(1);
+  const emptyCaptureBox = await page
+    .getByRole("region", { name: "Document capture" })
+    .boundingBox();
+  const emptyRecentBox = await page
+    .locator("section.section", { hasText: "Recent documents" })
+    .boundingBox();
+  expect(emptyCaptureBox).not.toBeNull();
+  expect(emptyRecentBox).not.toBeNull();
+  expect(emptyCaptureBox.y + emptyCaptureBox.height).toBeLessThanOrEqual(
+    emptyRecentBox.y + 1,
+  );
+
+  // Populate personal workspace with a document and follow-up so Today's Focus appears.
+  await sample(page);
+  await page.getByRole("button", { name: "Add follow-up" }).click();
+  await page.getByRole("button", { name: "Create action" }).click();
+
+  for (const vp of [
+    { width: 1280, height: 850 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(vp);
+    await page.goto("/#/home");
+    await expect(page.getByRole("link", { name: "Explore demo" })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: "Explore demo" })).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBeTruthy();
+
+    const focusSection = page.getByRole("region", { name: "Today’s Focus" });
+    const captureSection = page.getByRole("region", { name: "Document capture" });
+    const recentSection = page.locator("section.section", {
+      hasText: "Recent documents",
+    });
+
+    await expect(captureSection.getByRole("button", { name: "Upload file" })).toBeVisible();
+    await expect(captureSection.getByRole("button", { name: "Try sample" })).toBeVisible();
+
+    const focusBox = await focusSection.boundingBox();
+    const captureBox = await captureSection.boundingBox();
+    const recentBox = await recentSection.boundingBox();
+    expect(focusBox.y + focusBox.height).toBeLessThanOrEqual(captureBox.y + 1);
+    expect(captureBox.y + captureBox.height).toBeLessThanOrEqual(recentBox.y + 1);
+
+    // Confirm DOM/reading order matches Today's Focus -> Document capture -> Recent documents.
+    const order = await page.evaluate(() => {
+      const f = document.querySelector('section[aria-label="Today’s Focus"]');
+      const c = document.querySelector('section[aria-label="Document capture"]');
+      const r = [...document.querySelectorAll("section.section")].find((s) =>
+        s.textContent.includes("Recent documents"),
+      );
+      return {
+        fBeforeC: Boolean(f.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING),
+        cBeforeR: Boolean(c.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING),
+      };
+    });
+    expect(order).toEqual({ fBeforeC: true, cBeforeR: true });
+  }
+
+  await page.setViewportSize({ width: 1280, height: 850 });
+  await page.getByRole("link", { name: "Explore demo" }).click();
+  await expect(page).toHaveURL(/\?demo=1#\/home$/);
+  await expect(page.getByRole("link", { name: "Explore demo" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Exit demo" })).toBeVisible();
+  await page.getByRole("link", { name: "Exit demo" }).first().click();
+  await expect(page).toHaveURL(/\/#\/home$/);
+  await expect(page.getByRole("link", { name: "Explore demo" })).toHaveCount(1);
+});
+
+test("Delete filed document: cancel default focus, cascade actions/links, reload persistence, failure recovery, demo isolation, and Bahasa Indonesia WCAG AA", async ({
+  page,
+}) => {
+  // Capture & file Doc 1 (with 2 actions) and Doc 2 (with 1 dependent action).
+  await page.goto("/#/capture");
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page
+    .getByLabel("Document text")
+    .fill("Monthly water invoice\nAccount W-101\nTotal: USD 30.00");
+  await page.getByRole("button", { name: "Save & organize" }).click();
+  await expect(page.getByRole("heading", { name: "Monthly water invoice" })).toBeVisible();
+  const doc1Url = page.url();
+
+  for (const title of ["Check meter reading", "Pay water invoice"]) {
+    await page.getByRole("button", { name: "Add an action" }).click();
+    await page.getByLabel("Action title").fill(title);
+    await page.getByRole("button", { name: "Create action" }).click();
+    await expect(page.getByLabel("Action title")).toHaveCount(0);
+  }
+
+  await sample(page);
+  await page.getByRole("button", { name: "Add follow-up" }).click();
+  await page.getByRole("button", { name: "Create action" }).click();
+  await expect(page.getByLabel("Action title")).toHaveCount(0);
+
+  // Put all 3 actions into one group and link Doc 1 action -> Doc 2 action.
+  await page.getByRole("link", { name: "Actions", exact: true }).first().click();
+  await page.getByRole("button", { name: "New group" }).click();
+  await page.getByLabel("Group name").fill("Monthly errands");
+  await page.getByRole("button", { name: "Create group" }).click();
+  const group = page.getByRole("region", { name: "Monthly errands" });
+  await expect(group).toBeVisible();
+
+  for (const title of ["Check meter reading", "Pay water invoice", "Renew your membership"]) {
+    const card = page.locator(".action-card", {
+      has: page.getByRole("checkbox", { name: new RegExp(title) }),
+    });
+    await card.getByRole("button", { name: "Details" }).click();
+    await card.getByLabel(/group/i).selectOption({ label: "Monthly errands" });
+  }
+  const renewCard = group.locator(".action-card", {
+    has: page.getByRole("checkbox", { name: /Renew your membership/ }),
+  });
+  const payOption = await renewCard
+    .getByLabel("Add prerequisite")
+    .locator("option", { hasText: "Pay water invoice" })
+    .getAttribute("value");
+  await renewCard.getByLabel("Add prerequisite").selectOption(payOption);
+  await renewCard.getByRole("button", { name: "Connect step" }).click();
+  await expect(renewCard).toContainText("Waiting on 1 step");
+  await expect(group.getByText("0 of 3 steps completed")).toBeVisible();
+
+  // Open Doc 1, test Delete document confirmation default focus & Cancel.
+  await page.goto(doc1Url);
+  await page.getByRole("button", { name: "Delete document" }).click();
+  const confirm = page.getByRole("region", {
+    name: /Delete “Monthly water invoice”\?/,
+  });
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText("2 linked follow-ups");
+  const cancelBtn = confirm.getByRole("button", { name: "Cancel" });
+  await expect(cancelBtn).toBeFocused();
+  await cancelBtn.click();
+  await expect(confirm).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Monthly water invoice" })).toBeVisible();
+
+  // Confirm deletion and verify redirect, cascade cleanup, Today's Focus update, and reload persistence.
+  await page.getByRole("button", { name: "Delete document" }).click();
+  await page.getByRole("button", { name: "Delete permanently" }).click();
+  await expect(page).toHaveURL(/#\/library$/);
+  await expect(page.getByRole("status")).toContainText("Document deleted.");
+  await expect(page.getByText("1 document", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Monthly water invoice/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: /Household membership renewal notice/ }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Actions", exact: true }).first().click();
+  await expect(page.getByText("Check meter reading")).toHaveCount(0);
+  await expect(page.getByText("Pay water invoice")).toHaveCount(0);
+  await expect(group.getByText("0 of 1 steps completed")).toBeVisible();
+  await expect(renewCard).not.toContainText("Waiting");
+
+  await page.getByRole("link", { name: "Home", exact: true }).first().click();
+  await expect(page.getByRole("region", { name: "Today’s Focus" })).toContainText(
+    "Renew your membership",
+  );
+
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Today’s Focus" })).toContainText(
+    "Renew your membership",
+  );
+
+  // Failure path: capture a 3rd doc, remove it underneath in IndexedDB, then confirm error keeps detail page open.
+  await page.goto("/#/capture");
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page.getByLabel("Document text").fill("Temp receipt\nTotal: USD 5.00");
+  await page.getByRole("button", { name: "Save & organize" }).click();
+  await expect(page.getByRole("heading", { name: "Temp receipt" })).toBeVisible();
+  const tempUrl = page.url();
+  const tempId = tempUrl.split("/").pop();
+  await page.evaluate(
+    (docId) =>
+      new Promise((resolve, reject) => {
+        const req = indexedDB.open("tuntas-workspace-v1");
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(["documents", "originals"], "readwrite");
+          tx.objectStore("documents").delete(docId);
+          tx.objectStore("originals").delete(docId);
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+    tempId,
+  );
+  await page.getByRole("button", { name: "Delete document" }).click();
+  await page.getByRole("button", { name: "Delete permanently" }).click();
+  await expect(page).toHaveURL(tempUrl);
+  await expect(page.getByRole("alert")).toContainText("could not be deleted");
+
+  // Demo isolation & Bahasa Indonesia + axe WCAG AA check.
+  await page.goto("/?demo=1#/document/demo-doc-training-invoice");
+  await page.getByLabel("Language").selectOption("id");
+  await page.getByRole("button", { name: "Hapus dokumen" }).click();
+  const idConfirm = page.getByRole("region", {
+    name: /Hapus “Cedarbridge workshop invoice”\?/,
+  });
+  await expect(idConfirm).toBeVisible();
+  await expect(idConfirm).toContainText("1 tindak lanjut yang tertaut");
+  await expect(idConfirm.getByRole("button", { name: "Batal" })).toBeFocused();
+
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(
+    violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((n) => n.target),
+    })),
+  ).toEqual([]);
+
+  await idConfirm.getByRole("button", { name: "Hapus permanen" }).click();
+  await expect(page).toHaveURL(/\?demo=1#\/library$/);
+  await expect(page.getByRole("status")).toContainText("Dokumen dihapus.");
+  await expect(page.getByText("11 dokumen", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("11 dokumen", { exact: true })).toBeVisible();
+
+  await page.goto("/?demo=1#/actions");
+  const demoGroup = page.getByRole("region", { name: "Training reimbursement" });
+  await expect(demoGroup.getByText("1 dari 3 langkah selesai")).toBeVisible();
+  await expect(
+    demoGroup.locator("#action-card-demo-action-training-submit .readiness-chip"),
+  ).toHaveText("Siap");
+
+  // Personal workspace retains its own document untouched.
+  await page.getByRole("link", { name: "Keluar demo" }).click();
+  await page.getByLabel("Bahasa").selectOption("en");
+  await page.getByRole("link", { name: "Library", exact: true }).first().click();
+  await expect(page.getByText("1 document", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Household membership renewal notice/ }),
+  ).toBeVisible();
+});
+
+test("account entry without Firebase Auth config supports local-only continuation, demo return routing, and ID WCAG AA", async ({
+  page,
+}) => {
+  await page.goto("/#/account");
+  await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
+  await expect(page.getByText("Cloud sign-in is not configured here")).toBeVisible();
+
+  await page.getByLabel("Language").selectOption("id");
+  await expect(page.getByRole("heading", { name: "Akun" })).toBeVisible();
+
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(
+    violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((n) => n.target),
+    })),
+  ).toEqual([]);
+
+  await page.getByLabel("Bahasa").selectOption("en");
+  await page.getByRole("link", { name: "Explore demo" }).click();
+  await expect(page).toHaveURL(/\?demo=1.*#\/home$/);
+  await page.goto("/?demo=1&from=%2Faccount#/account");
+  await expect(
+    page.getByText("Accounts are disabled in the sample workspace"),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Exit demo" }).first().click();
+  await expect(page).toHaveURL(/#\/account$/);
+
+  await page.getByRole("link", { name: "Continue on this device" }).click();
+  await expect(page).toHaveURL(/#\/home$/);
 });

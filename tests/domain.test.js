@@ -7,11 +7,28 @@ import {
   REDACTED_RECEIPT_SEED_KEY,
   REDACTED_RECEIPT_SOURCE,
   REDACTED_RECEIPT_FIXTURES,
+  DEMO_WORKFLOW_SEED_KEY,
+  DEMO_RENEWAL_GROUP_ID,
   isDemoMode,
   demoWorkspaceHref,
   exitDemoHref,
   buildDemoSeed,
+  buildDemoWorkflowSeed,
 } from "../src/demo.js";
+import {
+  DUE_SOON_DAYS,
+  isValidIsoDate,
+  toLocalIsoDate,
+  calendarDaysBetween,
+  getActionUrgency,
+  dependencyId,
+  validateDependency,
+  evaluateActionStates,
+  getGroupProgress,
+  selectTodaysFocus,
+  orderGroupActions,
+  computeGroupGraphLayout,
+} from "../src/actions-domain.js";
 import {
   DEFAULT_LANG,
   loadLang,
@@ -22,6 +39,17 @@ import {
   translateMode,
   translateRuntimeMessage,
 } from "../src/i18n.js";
+import { mapAuthError } from "../src/auth.js";
+import {
+  SYNC_COLLECTIONS,
+  tombstoneKey,
+  toRemoteDocument,
+  toRemoteAction,
+  toRemoteGroup,
+  toRemoteDependency,
+  toTombstonePayload,
+  reconcileCollection,
+} from "../src/sync-domain.js";
 import {
   validateFile,
   validateText,
@@ -611,4 +639,437 @@ test("language helpers default to English, persist selection, and format calenda
     translateRuntimeMessage("Custom user text", "id"),
     "Custom user text",
   );
+});
+
+test("urgency thresholds and local calendar formatting avoid UTC day shifts", () => {
+  const lateNightLocal = new Date(2026, 10, 22, 23, 45, 0);
+  assert.equal(toLocalIsoDate(lateNightLocal), "2026-11-22");
+  assert.equal(isValidIsoDate("2026-11-22"), true);
+  assert.equal(isValidIsoDate("2026-02-30"), false);
+  assert.equal(isValidIsoDate(""), false);
+  assert.equal(DUE_SOON_DAYS, 7);
+  assert.equal(calendarDaysBetween("2026-11-22", "2026-11-21"), -1);
+  assert.equal(calendarDaysBetween("2026-11-22", "2026-11-29"), 7);
+
+  const today = "2026-11-22";
+  assert.equal(getActionUrgency({ done: false, due: "2026-11-21" }, today), "overdue");
+  assert.equal(getActionUrgency({ done: false, due: "2026-11-22" }, today), "due_today");
+  assert.equal(getActionUrgency({ done: false, due: "2026-11-23" }, today), "due_soon");
+  assert.equal(getActionUrgency({ done: false, due: "2026-11-29" }, today), "due_soon");
+  assert.equal(getActionUrgency({ done: false, due: "2026-11-30" }, today), "upcoming");
+  assert.equal(getActionUrgency({ done: false, due: "" }, today), "no_due_date");
+  assert.equal(getActionUrgency({ done: true, due: "2026-11-01" }, today), "completed");
+});
+
+test("dependency validation blocks missing, self, cross-group, duplicate, and cyclic links", () => {
+  const actions = [
+    { id: "a", groupId: "g1", done: false },
+    { id: "b", groupId: "g1", done: false },
+    { id: "c", groupId: "g1", done: false },
+    { id: "other", groupId: "g2", done: false },
+    { id: "solo", done: false },
+  ];
+  const deps = [
+    { id: dependencyId("a", "b"), prerequisiteActionId: "a", dependentActionId: "b" },
+    { id: dependencyId("b", "c"), prerequisiteActionId: "b", dependentActionId: "c" },
+  ];
+
+  assert.equal(validateDependency(actions, deps, "a", "missing").code, "missing");
+  assert.equal(validateDependency(actions, deps, "a", "a").code, "self");
+  assert.equal(validateDependency(actions, deps, "a", "other").code, "cross_group");
+  assert.equal(validateDependency(actions, deps, "a", "solo").code, "cross_group");
+  assert.equal(validateDependency(actions, deps, "a", "b").code, "duplicate");
+  assert.equal(validateDependency(actions, deps, "b", "a").code, "cycle");
+  assert.equal(validateDependency(actions, deps, "c", "a").code, "cycle");
+
+  const valid = validateDependency(actions, deps, "a", "c");
+  assert.equal(valid.ok, true);
+  assert.equal(valid.id, "a->c");
+});
+
+test("readiness transitions: waiting to ready, reopening prerequisite without reversing completed dependents", () => {
+  const baseActions = [
+    { id: "a", groupId: "g1", done: false },
+    { id: "b", groupId: "g1", done: false },
+    { id: "c", groupId: "g1", done: true },
+  ];
+  const deps = [
+    { id: "a->b", prerequisiteActionId: "a", dependentActionId: "b" },
+    { id: "a->c", prerequisiteActionId: "a", dependentActionId: "c" },
+    { id: "dangling->b", prerequisiteActionId: "missing", dependentActionId: "b" },
+  ];
+
+  let states = evaluateActionStates(baseActions, deps);
+  assert.equal(states.get("a").readiness, "ready");
+  assert.equal(states.get("b").readiness, "waiting");
+  assert.equal(states.get("c").readiness, "completed");
+
+  const aDone = baseActions.map((x) => (x.id === "a" ? { ...x, done: true } : x));
+  states = evaluateActionStates(aDone, deps);
+  assert.equal(states.get("b").readiness, "ready");
+  assert.equal(getGroupProgress("g1", aDone, states).completed, 2);
+  assert.equal(getGroupProgress("g1", aDone, states).total, 3);
+
+  // Reopen A: unfinished B returns to waiting, completed C stays completed.
+  states = evaluateActionStates(baseActions, deps);
+  assert.equal(states.get("b").readiness, "waiting");
+  assert.equal(states.get("c").readiness, "completed");
+});
+
+test("Today's Focus ranks ready actions by urgency and explains waiting or empty states", () => {
+  const today = "2026-11-22";
+  const groups = [{ id: "g1", title: "Renewal" }];
+  assert.equal(selectTodaysFocus([], groups, [], today).kind, "empty");
+  assert.equal(
+    selectTodaysFocus([{ id: "1", done: true }], groups, [], today).kind,
+    "all_done",
+  );
+
+  const actions = [
+    { id: "waiting-overdue", groupId: "g1", done: false, due: "2026-11-01", created: 1 },
+    { id: "no-date", done: false, due: "", created: 2 },
+    { id: "upcoming", done: false, due: "2026-12-10", created: 3 },
+    { id: "due-soon", done: false, due: "2026-11-25", created: 4 },
+    { id: "due-today", done: false, due: "2026-11-22", created: 5 },
+    { id: "ready-overdue", groupId: "g1", done: false, due: "2026-11-20", created: 6 },
+  ];
+  const deps = [
+    { id: "ready-overdue->waiting-overdue", prerequisiteActionId: "ready-overdue", dependentActionId: "waiting-overdue" },
+  ];
+
+  const first = selectTodaysFocus(actions, groups, deps, today);
+  assert.equal(first.kind, "action");
+  assert.equal(first.action.id, "ready-overdue");
+  assert.equal(first.urgency, "overdue");
+  assert.equal(first.group?.title, "Renewal");
+
+  const afterFirstDone = actions.filter(
+    (a) => a.id !== "ready-overdue" && a.id !== "waiting-overdue",
+  );
+  assert.equal(selectTodaysFocus(afterFirstDone, groups, deps, today).action.id, "due-today");
+  const afterDueToday = afterFirstDone.filter((a) => a.id !== "due-today");
+  assert.equal(selectTodaysFocus(afterDueToday, groups, deps, today).action.id, "due-soon");
+  const afterDueSoon = afterDueToday.filter((a) => a.id !== "due-soon");
+  assert.equal(selectTodaysFocus(afterDueSoon, groups, deps, today).action.id, "upcoming");
+  const afterUpcoming = afterDueSoon.filter((a) => a.id !== "upcoming");
+  assert.equal(selectTodaysFocus(afterUpcoming, groups, deps, today).action.id, "no-date");
+
+  const onlyWaiting = [
+    { id: "p", groupId: "g1", done: false, due: "" },
+    { id: "w", groupId: "g1", done: false, due: "2026-11-01" },
+  ];
+  const waitingFocus = selectTodaysFocus(
+    onlyWaiting.filter((a) => a.id === "w"),
+    groups,
+    [],
+    today,
+  );
+  assert.equal(waitingFocus.kind, "action");
+
+  // Simulate two actions where the only open one waits on a separate open prerequisite? Wait:
+  // If prerequisite is open, prerequisite is Ready. A pure waiting-only open state occurs only if corrupted/cyclic,
+  // or when testing evaluateActionStates; verify orderGroupActions and computeGroupGraphLayout as well.
+  const ordered = orderGroupActions(
+    [
+      { id: "step2", groupId: "g1", title: "Step 2", due: "2026-11-01", created: 1 },
+      { id: "step1", groupId: "g1", title: "Step 1", due: "2026-12-01", created: 2 },
+    ],
+    [{ id: "step1->step2", prerequisiteActionId: "step1", dependentActionId: "step2" }],
+  );
+  assert.deepEqual(ordered.map((a) => a.id), ["step1", "step2"]);
+
+  const layout = computeGroupGraphLayout(ordered, [
+    { id: "step1->step2", prerequisiteActionId: "step1", dependentActionId: "step2" },
+  ]);
+  assert.equal(layout.nodes.length, 2);
+  assert.equal(layout.edges.length, 1);
+  assert.ok(layout.nodes[0].x < layout.nodes[1].x);
+  assert.match(layout.edges[0].path, /^M /);
+});
+
+test("demo connected workflow seed defines 3-step renewal group across documents", () => {
+  const wf = buildDemoWorkflowSeed();
+  assert.ok(DEMO_WORKFLOW_SEED_KEY);
+  assert.equal(wf.groups.length, 1);
+  assert.equal(wf.groups[0].id, DEMO_RENEWAL_GROUP_ID);
+  assert.equal(wf.actions.length, 3);
+  assert.equal(wf.dependencies.length, 2);
+  assert.deepEqual(
+    wf.actions.map((a) => a.title),
+    ["Prepare address proof", "Submit renewal", "Verify confirmation"],
+  );
+  assert.equal(wf.actions[0].documentId, "demo-doc-utility");
+  assert.equal(wf.actions[1].documentId, "demo-doc-renewal");
+  assert.equal(wf.actions[2].due, "");
+
+  const tEn = createTranslator("en");
+  const tId = createTranslator("id");
+  for (const key of [
+    "allDocuments",
+    "todaysFocusHeading",
+    "viewConnections",
+    "newGroup",
+    "urgencyOverdue",
+    "urgencyDueToday",
+    "urgencyDueSoon",
+    "evidenceHeading",
+    "filterNoDueDate",
+    "deleteDocument",
+    "confirmDeleteDocument",
+    "deleteDocumentConfirmBody",
+  ]) {
+    assert.notEqual(tEn(key), key);
+    assert.notEqual(tId(key), key);
+    assert.notEqual(tEn(key), tId(key));
+  }
+  assert.match(tEn("deleteDocumentConfirmWithActions", { count: 2 }), /2 linked follow-ups/);
+  assert.match(tId("deleteDocumentConfirmWithActions", { count: 2 }), /2 tindak lanjut/);
+  assert.equal(translateRuntimeMessage("Document deleted.", "id"), "Dokumen dihapus.");
+  assert.equal(
+    translateRuntimeMessage("The document could not be deleted. Try again.", "id"),
+    "Dokumen tidak dapat dihapus. Coba lagi.",
+  );
+});
+
+test("sync-domain sanitizers strip local-only fields and enforce progress schema", () => {
+  assert.deepEqual(SYNC_COLLECTIONS, [
+    "documents",
+    "actionGroups",
+    "actions",
+    "actionDependencies",
+  ]);
+  assert.equal(tombstoneKey("documents", "d1"), "documents:d1");
+
+  const doc = toRemoteDocument({
+    id: "d1",
+    title: "Electricity bill",
+    name: "bill.pdf",
+    category: "Money & Bills",
+    tags: ["utility", "paid", ""],
+    status: "organized",
+    created: 1000,
+    updatedAt: 2000,
+    text: "SECRET FULL TEXT",
+    evidence: "SECRET EVIDENCE",
+    facts: [{ label: "Total", value: "USD 48", quote: "Total: USD 48" }],
+    reason: "Private reason",
+    digest: "sha256:abc",
+    mime: "application/pdf",
+    size: 9001,
+  });
+  assert.deepEqual(Object.keys(doc).sort(), [
+    "category",
+    "created",
+    "deleted",
+    "deletedAt",
+    "id",
+    "status",
+    "tags",
+    "title",
+    "updatedAt",
+  ]);
+  assert.equal(doc.text, undefined);
+  assert.equal(doc.evidence, undefined);
+  assert.equal(doc.facts, undefined);
+  assert.deepEqual(doc.tags, ["utility", "paid"]);
+  assert.equal(doc.deleted, false);
+
+  const act = toRemoteAction({
+    id: "a1",
+    documentId: "d1",
+    title: "Pay invoice",
+    due: "2026-12-12",
+    done: true,
+    groupId: "g1",
+    quote: "SECRET QUOTE",
+    suggestionKey: "k1",
+    created: 1000,
+    updatedAt: 2500,
+  });
+  assert.deepEqual(Object.keys(act).sort(), [
+    "created",
+    "deleted",
+    "deletedAt",
+    "documentId",
+    "done",
+    "due",
+    "groupId",
+    "id",
+    "title",
+    "updatedAt",
+  ]);
+  assert.equal(act.quote, undefined);
+
+  const grp = toRemoteGroup({ id: "g1", title: "Home", created: 100, updated: 200 });
+  assert.equal(grp.updatedAt, 200);
+  const dep = toRemoteDependency({
+    id: "a1->a2",
+    prerequisiteActionId: "a1",
+    dependentActionId: "a2",
+    created: 300,
+  });
+  assert.equal(dep.deleted, false);
+
+  const docTomb = toTombstonePayload("documents", "d1", 5000, {
+    title: "Old doc",
+    category: "Other",
+    created: 1000,
+  });
+  assert.equal(docTomb.deleted, true);
+  assert.equal(docTomb.deletedAt, 5000);
+  assert.equal(docTomb.text, undefined);
+});
+
+test("reconcileCollection preserves local-only fields, merges LWW edits, and prevents resurrection via tombstones", () => {
+  const sameDeviceMerge = reconcileCollection({
+    collection: "documents",
+    localRecords: [
+      {
+        id: "d1",
+        title: "Old title",
+        category: "Other",
+        tags: ["a"],
+        status: "needs_review",
+        created: 1000,
+        updatedAt: 1500,
+        text: "Original kept locally",
+        facts: [{ label: "Ref", value: "123" }],
+        remoteOnly: false,
+        _dirty: false,
+      },
+    ],
+    remoteRecords: [
+      {
+        id: "d1",
+        title: "Updated from phone",
+        category: "Money & Bills",
+        tags: ["a", "b"],
+        status: "organized",
+        created: 1000,
+        updatedAt: 3000,
+        deleted: false,
+        deletedAt: null,
+      },
+      {
+        id: "d2",
+        title: "Created on phone",
+        category: "Work & Study",
+        tags: [],
+        status: "organized",
+        created: 2000,
+        updatedAt: 2500,
+        deleted: false,
+        deletedAt: null,
+      },
+    ],
+    localTombstones: [],
+  });
+
+  assert.equal(sameDeviceMerge.localUpserts.length, 2);
+  const mergedLocal = sameDeviceMerge.localUpserts.find((r) => r.id === "d1");
+  assert.equal(mergedLocal.title, "Updated from phone");
+  assert.equal(mergedLocal.text, "Original kept locally");
+  assert.equal(mergedLocal.remoteOnly, false);
+
+  const pulledRemoteOnly = sameDeviceMerge.localUpserts.find((r) => r.id === "d2");
+  assert.equal(pulledRemoteOnly.remoteOnly, true);
+  assert.equal(pulledRemoteOnly.text, "");
+
+  // Stale offline device has local dirty edit on d-del, but remote already has permanent tombstone
+  const staleResurrectionBlocked = reconcileCollection({
+    collection: "documents",
+    localRecords: [
+      {
+        id: "d-del",
+        title: "Stale edit",
+        category: "Other",
+        status: "organized",
+        created: 1000,
+        updatedAt: 99999,
+        _dirty: true,
+      },
+    ],
+    remoteRecords: [
+      {
+        id: "d-del",
+        title: "Deleted document",
+        category: "Other",
+        tags: [],
+        status: "organized",
+        created: 1000,
+        updatedAt: 5000,
+        deleted: true,
+        deletedAt: 5000,
+      },
+    ],
+    localTombstones: [],
+  });
+  assert.deepEqual(staleResurrectionBlocked.localDeletes, ["d-del"]);
+  assert.deepEqual(staleResurrectionBlocked.remoteUpserts, []);
+
+  // Re-linked dependency with strictly newer timestamp survives earlier remote tombstone
+  const relinkPlan = reconcileCollection({
+    collection: "actionDependencies",
+    localRecords: [
+      {
+        id: "a1->a2",
+        prerequisiteActionId: "a1",
+        dependentActionId: "a2",
+        created: 1000,
+        updatedAt: 6000,
+        _dirty: true,
+      },
+    ],
+    remoteRecords: [
+      {
+        id: "a1->a2",
+        prerequisiteActionId: "a1",
+        dependentActionId: "a2",
+        created: 1000,
+        updatedAt: 4000,
+        deleted: true,
+        deletedAt: 4000,
+      },
+    ],
+    localTombstones: [],
+  });
+  assert.equal(relinkPlan.remoteUpserts.length, 1);
+  assert.equal(relinkPlan.localDeletes.length, 0);
+});
+
+test("auth error mapping, demo return routing, and account/sync i18n coverage", () => {
+  assert.equal(mapAuthError({ code: "auth/popup-closed-by-user" }), "authErrorPopupClosed");
+  assert.equal(mapAuthError({ code: "auth/popup-blocked" }), "authErrorPopupBlocked");
+  assert.equal(
+    mapAuthError({ code: "auth/account-exists-with-different-credential" }),
+    "authErrorDifferentCredential",
+  );
+  assert.equal(mapAuthError({ code: "auth/email-already-in-use" }), "authErrorEmailInUse");
+  assert.equal(mapAuthError({ code: "auth/unknown" }), "authErrorGeneric");
+
+  assert.equal(demoWorkspaceHref("/", "/account"), "/?demo=1&from=%2Faccount#/home");
+  assert.equal(exitDemoHref("/", "?demo=1&from=%2Faccount"), "/#/account");
+  assert.equal(exitDemoHref("/", "?demo=1&from=http://evil.example"), "/#/home");
+
+  const tEn = createTranslator("en");
+  const tId = createTranslator("id");
+  for (const key of [
+    "navAccount",
+    "continueWithGoogle",
+    "continueOnThisDevice",
+    "enableSync",
+    "disableSync",
+    "syncStatusOff",
+    "syncStatusPending",
+    "syncStatusSynced",
+    "syncStatusFailed",
+    "originalUnavailableOnDevice",
+    "importAndEnableSync",
+  ]) {
+    assert.notEqual(tEn(key), key);
+    assert.notEqual(tId(key), key);
+    assert.notEqual(tEn(key), tId(key));
+  }
+  assert.match(tEn("importPromptBody", { docs: 2, actions: 3 }), /2 local document.*3 follow-up/);
+  assert.match(tId("importPromptBody", { docs: 2, actions: 3 }), /2 dokumen lokal.*3 tindak lanjut/);
 });

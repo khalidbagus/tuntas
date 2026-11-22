@@ -12,6 +12,7 @@ export default defineConfig({
   webServer: {
     // Local journey tests must stay independent of a developer's live project.
     env: {
+      VITE_FIREBASE_USE_EMULATORS: "",
       VITE_FIREBASE_API_KEY: "",
       VITE_FIREBASE_PROJECT_ID: "",
       VITE_FIREBASE_APP_ID: "",

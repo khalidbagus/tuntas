@@ -15,6 +15,7 @@ const selected = [
   "docs/demo/desktop.png", "docs/demo/mobile.png", "docs/demo/filed-receipt.png",
   "docs/demo/firebase-device.png", "docs/demo/mobile-phone.png", "docs/demo/mobile-phone-cloud.png",
   "docs/demo/firebase-cloud.jpg",
+  "docs/demo/workspace-home.png", "docs/demo/workspace-library.png", "docs/demo/workspace-connections.png",
   "scripts/android-dev.ps1", "scripts/verify-nano.mjs", "scripts/verify-receipts.mjs", "scripts/demo-screens.mjs", "scripts/prepare-release.mjs",
 ];
 async function walk(directory) {

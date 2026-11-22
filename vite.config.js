@@ -16,7 +16,7 @@ function localDemoReceipts() {
           req.method !== "GET" ||
           !localHost.test(req.headers.host || "") ||
           req.headers["sec-fetch-site"] === "cross-site" ||
-          !/^(?:manifest\.json|receipt_[1-4]\.jpeg)$/.test(file || "")
+          !/^(?:manifest\.json|receipt_[1-8]\.jpeg)$/.test(file || "")
         ) {
           res.writeHead(404).end();
           return;

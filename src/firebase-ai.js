@@ -1,4 +1,3 @@
-import { initializeApp } from "firebase/app";
 import {
   initializeAppCheck,
   ReCaptchaEnterpriseProvider,
@@ -12,8 +11,10 @@ import {
 } from "firebase/ai";
 import { categories } from "./domain.js";
 import { debugToken } from "./firebase-settings.js";
+import { getFirebaseApp } from "./firebase-app.js";
 import { supportsDeviceAI } from "./device-ai.js";
 let ai;
+let appCheckInitialized = false;
 const string = { type: "string" };
 const schema = {
   type: "object",
@@ -60,20 +61,19 @@ function dataPart(blob) {
 export function prepareAI({ allowCloud, image }) {
   if (!ai) {
     const env = import.meta.env;
-    const app = initializeApp({
-      apiKey: env.VITE_FIREBASE_API_KEY,
-      projectId: env.VITE_FIREBASE_PROJECT_ID,
-      appId: env.VITE_FIREBASE_APP_ID,
-    });
+    const app = getFirebaseApp();
     // Set before App Check initializes. A registered private token is required
     // for localhost development; production uses normal attestation.
-    if (debugToken) globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
-    initializeAppCheck(app, {
-      provider: new ReCaptchaEnterpriseProvider(
-        env.VITE_APP_CHECK_SITE_KEY || "development-debug-provider",
-      ),
-      isTokenAutoRefreshEnabled: true,
-    });
+    if (!appCheckInitialized) {
+      if (debugToken) globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
+      initializeAppCheck(app, {
+        provider: new ReCaptchaEnterpriseProvider(
+          env.VITE_APP_CHECK_SITE_KEY || "development-debug-provider",
+        ),
+        isTokenAutoRefreshEnabled: true,
+      });
+      appCheckInitialized = true;
+    }
     ai = getAI(app, { backend: new GoogleAIBackend() });
   }
   const model = getGenerativeModel(

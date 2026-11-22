@@ -10,6 +10,10 @@
     "test": "node --test tests/domain.test.js",
     "test:e2e": "playwright test",
     "test:e2e:webkit": "playwright test --browser=webkit --workers=1",
+    "emulators": "npx --yes firebase-tools emulators:start --only auth,firestore --project demo-tuntas-dev",
+    "test:rules": "npx --yes firebase-tools emulators:exec --only firestore --project demo-tuntas-dev \"node --test tests/firestore.rules.test.js\"",
+    "test:e2e:sync": "npx --yes firebase-tools emulators:exec --only auth,firestore --project demo-tuntas-dev \"playwright test --config=playwright.emulator.config.js\"",
+    "test:e2e:sync:webkit": "npx --yes firebase-tools emulators:exec --only auth,firestore --project demo-tuntas-dev \"playwright test --config=playwright.emulator.config.js --browser=webkit --workers=1\"",
     "release:prepare": "node scripts/prepare-release.mjs"
   },
   "engines": {
@@ -27,6 +31,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@playwright/test": "^1.65.1",
     "vite": "^8.3.8"
   },
