@@ -1,6 +1,8 @@
 # Tuntas ✦
 Capture a document once. Find it later by what it contains, correct uncertain filing, or attach a follow-up. This is a local-first web MVP based on the actual Tuntas Stitch exports. No Firebase account is required for the browser-only workflow.
 
+[Open the live demo](https://tuntas-dev.web.app/) · [Judging walkthrough](docs/submission/JUDGING.md)
+
 ## Run locally
 Use Node 22.13+ and npm. From this folder:
 ```sh
@@ -10,9 +12,9 @@ npm run dev
 Open the loopback URL printed by Vite. Use the **same hostname, port and browser profile** on later visits. A separate profile starts empty. For the production bundle use `npm run build`, then `npm run preview`. Public deployment is not part of this setup.
 
 ## Try it
-1. On Home choose the arrow on **Fieldnote Supply · Synthetic receipt**. The sample runs real local rules, never a Firebase request. It files under Purchases with USD 24.00 and a source excerpt.
-2. Open Library. Search for `notebook 24.00`. Open the result, inspect the original, edit the category or Undo filing. Undo moves the record to Inbox without deleting the original. Capture the same receipt again to open the existing document.
-3. Add an action with a title of your choice. Its date is optional. Complete it in Actions and follow its source link.
+1. On Home choose **Try sample** on the synthetic Household renewal card. It uses Local rules and shows a source-linked follow-up.
+2. Choose **Add follow-up**, check the excerpt and due date, then choose **Create action**. Reload Actions and follow the document link to open the original.
+3. In Library, search for `household renewal` to find the document again. Use **Undo filing** to move it to Inbox. Trying the same sample again opens the existing document.
 4. Paste `Sample lease and invoice`: conflicting matches need review. Submit a PDF without a text layer: the original remains available for retry, download or manual filing.
 
 ## Storage, formats and boundaries
@@ -21,7 +23,7 @@ React/Vite; IndexedDB stores originals, documents and actions in one browser ori
 Accepts one PDF, JPEG or PNG up to 8 MiB; 24-megapixel image cap; 16,000 characters of pasted text; 300 documents per workspace. PDF.js reads up to 8 pages / 16,000 characters of embedded text in a worker. Partial reads require review. A scanned PDF is never described as an on-device PDF inference: manually file, or supply a photograph. Native camera availability depends on browser and device; no deskew or multipage OCR. Local rules recognize a few literal document types and labeled totals, not arbitrary natural language. An open tab supports offline local filing; cold offline app launch and background sync are not implemented.
 
 ## Firebase integration
-The local workspace has an ignored development configuration for **Tuntas Dev**. Consented cloud inference works on the connected Samsung, including four private receipt photographs evaluated with the owner's permission. Desktop CPU text inference also succeeded through Firebase AI Logic with a synthetic receipt, SDK-reported **Firebase · on device**, and zero cloud generation requests. The installed local manifest identifies **v3Nano**. A Devpost staff reply relaying Firebase's answer accepts model access through Firebase AI Logic for this version question; see [provenance](docs/PROVENANCE.md). Production attestation remains unverified. See [development access](docs/DEVELOPMENT-ACCESS.md) and [recorded results](docs/VERIFICATION.md).
+The hosted demo passed production App Check and consented cloud inference in a signed-out Chrome profile. The renewal excerpt and due date matched the original, and the confirmed action survived reload. Desktop CPU inference also returned **Firebase · on device** for a synthetic renewal with zero cloud generation requests. The installed local manifest identified **v3Nano**. See [model provenance](docs/PROVENANCE.md) and the [judging walkthrough](docs/submission/JUDGING.md).
 
 The Firebase classifier is invoked from the configured Capture and Retry controls. The Home sample uses local rules. `src/firebase-ai.js` uses the modular SDK and App Check, initializes the model from the button gesture and calls `generateContent`. `src/engine.js` selects a swappable classifier.
 

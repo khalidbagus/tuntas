@@ -2,6 +2,10 @@
 
 Tuntas is a mobile-responsive web app; select Web/Chrome for judging. No native Android or iOS application is supplied. The default library belongs to one browser profile and origin. There is no account login or cross-device sync.
 
+## Hosted demo
+
+Open [Tuntas](https://tuntas-dev.web.app/) in Chrome. The sample walkthrough below works directly on the hosted site. For live cloud AI, use **Capture → Paste text** with a fresh synthetic renewal, select **Firebase AI · prefer device, allow cloud**, and check the per-document consent box. On a browser without a ready on-device model, inspect the **Firebase · cloud** label and the quoted evidence. Confirm the suggested follow-up, reload Actions, and reopen the source document. The hosted flow was verified signed out with production App Check.
+
 ## Local installation
 
 Use Node 22.13+ and npm. In the source directory:
@@ -15,12 +19,11 @@ Open `http://127.0.0.1:5173`. Keep that origin and profile to preserve the libra
 
 ## Three-minute functional tour without configuration
 
-1. On Home, choose **Try sample receipt**. This fictional Fieldnote receipt uses **Local rules**, not a live model.
-2. Inspect its Purchases category, USD 24.00 total, source excerpt and retained original.
-3. Open Library and search `notebook 24.00`. Open the result. Edit its category to Work & Study; save and reload to verify persistence.
-4. Add an action such as `Pack the notebook`, leaving its date empty. Complete it in Actions and follow the document backlink.
-5. Capture the same sample again: duplicate handling opens the existing original. Use Undo immediately after a fresh filing to move a document to Inbox; confirm its classification there.
-6. Paste `Sample lease and invoice` using Local rules: inspect the ambiguous review state. Upload a PDF without embedded text: retain/download the original or file manually rather than claiming unsupported PDF OCR.
+1. On Home, choose **Try sample** on the Household renewal card. The fictional notice uses **Local rules**.
+2. Check the excerpt and original. Choose **Add follow-up**, verify the due date of **12 December 2026**, then choose **Create action**.
+3. Open Actions, reload, and follow the link back to the source document. Open Library and search for `household renewal` to find it again.
+4. Try the sample again to verify duplicate handling. Use **Undo filing** after a fresh filing to move a document to Inbox for review.
+5. Paste `Sample lease and invoice` with Local rules to see an ambiguous review state. With an image-only PDF, use manual filing or download the retained original.
 
 Use only synthetic data. Clearing site data deletes the local library; another browser profile starts empty.
 
@@ -30,19 +33,17 @@ Follow the [Firebase hybrid web guide](https://firebase.google.com/docs/ai-logic
 
 Copy `.env.example` to `.env.local`, supplying your own web configuration. For localhost development register a private debug token in App Check and set `TUNTAS_APP_CHECK_DEBUG_TOKEN`. A production site key is not required for this loopback debug path. Restart Vite after configuration changes. Do not publish this file or share the token in the submission.
 
-Paste this fictional receipt in Capture (change the reference for each new inference; byte-identical input opens the existing document):
+Paste this fictional renewal in Capture. Change the reference for each live run because byte-identical input opens the existing document.
 
 ```text
-SYNTHETIC RECEIPT — not a real transaction
-Fieldnote Demo Shop
-Receipt: DEMO-LOCAL-001
-Item: Notebook
-Total: USD 12.00
+Household membership renewal notice
+Synthetic reference: DEMO-LOCAL-001
+Renew your membership by 12 December 2026.
 ```
 
 On a supported desktop Chrome with a downloaded local model, select **Firebase AI · device only**, then Save & organize. Inspect the actual processing result for **Firebase · on device**. Browser API presence alone does not prove model readiness. Setup/download time may require a retry; free sufficient RAM before testing. The observed laptop succeeded with roughly 5.9 GiB RAM available; this is an observation, not a universal threshold.
 
-For cloud fallback on unsupported browsers, use a different receipt reference, select **Firebase AI · prefer device, allow cloud**, and explicitly tick the per-document consent box. Expect the actual SDK-reported source; supported desktops may still choose local inference. Samsung Chrome lacking the local API was verified to return **Firebase · cloud**. Photo processing sends JPEG/PNG bytes to Google's model when cloud inference is selected and consented; photo results require review. Original files remain in browser storage; Firestore and Cloud Storage are not enabled.
+For cloud fallback on unsupported browsers, use a different synthetic reference, select **Firebase AI · prefer device, allow cloud**, and explicitly tick the per-document consent box. Supported desktops may still choose local inference. Samsung Chrome lacking the local API was verified to return **Firebase · cloud**. With per-document consent, cloud photo processing sends JPEG/PNG bytes to Google's model. Photo results require review. Original files remain in browser storage.
 
 Failure should preserve the original for retry, local rules (text), or manual filing. Device-only must never silently escalate to cloud. The SDK adapter guard is version-specific and must be reviewed on Firebase SDK upgrades.
 
