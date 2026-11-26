@@ -783,6 +783,7 @@ const messages = {
     splitRequestRetryBtn: "Request retry",
     splitSignInRequiredTitle: "Sign in to view this split bill",
     splitNotFound: "Split bill not found or access denied.",
+    splitDemoInteractiveChip: "Demo preview · stored locally",
     askPaperworkHeading: "Ask your paperwork",
     askPaperworkSubtitle:
       "Answers stay grounded in your local Library with clickable document citations.",
@@ -793,6 +794,7 @@ const messages = {
     askSearching: "Searching…",
     askSamplePromptSpending: "How much did I spend on receipts?",
     askSamplePromptRenewal: "When does household membership renew?",
+    askSamplePromptDinner: "What was on the Warung Taburai order?",
     askModeLocal: "Local search · no AI",
     askCloudConsentLabel:
       "Allow Cloud Gemini to synthesize an answer from the top matching local snippets.",
@@ -1380,6 +1382,7 @@ const messages = {
     splitRequestRetryBtn: "Minta kirim ulang",
     splitSignInRequiredTitle: "Masuk untuk melihat patungan ini",
     splitNotFound: "Patungan tidak ditemukan atau akses ditolak.",
+    splitDemoInteractiveChip: "Pratinjau demo · tersimpan lokal",
     askPaperworkHeading: "Tanya dokumen Anda",
     askPaperworkSubtitle:
       "Jawaban bersumber dari Pustaka lokal Anda dengan kutipan dokumen yang dapat diklik.",
@@ -1390,6 +1393,7 @@ const messages = {
     askSearching: "Mencari…",
     askSamplePromptSpending: "Berapa total pengeluaran struk saya?",
     askSamplePromptRenewal: "Kapan keanggotaan rumah tangga diperpanjang?",
+    askSamplePromptDinner: "Apa saja pesanan di struk Warung Taburai?",
     askModeLocal: "Pencarian lokal · tanpa AI",
     askCloudConsentLabel:
       "Izinkan Cloud Gemini merangkum jawaban dari cuplikan lokal paling relevan.",

@@ -8,6 +8,8 @@ import {
   REDACTED_RECEIPT_SEED_KEY,
   REDACTED_RECEIPT_SOURCE,
   REDACTED_RECEIPT_FIXTURES,
+  DEMO_EXTRA_RECEIPTS_SEED_KEY,
+  DEMO_EXTRA_RECEIPTS,
   DEMO_WORKFLOW_SEED_KEY,
   DEMO_RENEWAL_GROUP_ID,
   isDemoMode,
@@ -16,6 +18,7 @@ import {
   buildDemoSeed,
   buildDemoWorkflowSeed,
 } from "../src/demo.js";
+import { buildInitialDemoSplits } from "../src/demo-splits.js";
 import {
   DUE_SOON_DAYS,
   isValidIsoDate,
@@ -57,6 +60,7 @@ import {
   SPLIT_CURRENCIES,
   detectReceiptCurrency,
   detectReceiptTotal,
+  parseReceiptLineItems,
   calculateShares,
   buildSplitMailtoHref,
   verifyTransferProofLocally,
@@ -1378,4 +1382,51 @@ test("rag-local retrieves relevant docs and computes exact multi-receipt totals 
 
   const renewId = answerPaperworkLocally(docs, actions, "Kapan keanggotaan rumah tangga diperpanjang?", "id");
   assert.match(renewId.answer, /2026-12-12/);
+});
+
+test("DEMO_EXTRA_RECEIPTS and buildInitialDemoSplits provide redacted itemized receipts and interactive split states", () => {
+  assert.notEqual(DEMO_EXTRA_RECEIPTS_SEED_KEY, DEMO_SEED_KEY);
+  assert.equal(DEMO_EXTRA_RECEIPTS.length, 5);
+
+  const privateTerms = /annisaa|nurfitria|imelda|6285697282503|02961117n26a024|100035254/i;
+  for (const r of DEMO_EXTRA_RECEIPTS) {
+    assert.equal(privateTerms.test(r.title), false);
+    assert.equal(privateTerms.test(r.text), false);
+    assert.equal(detectReceiptCurrency(r, "en"), "IDR");
+    assert.ok(detectReceiptTotal(r) > 0);
+  }
+
+  const kfc = DEMO_EXTRA_RECEIPTS.find((r) => r.id === "demo-doc-kfc-receipt");
+  assert.equal(detectReceiptTotal(kfc), 50000);
+  const kfcItems = parseReceiptLineItems(kfc.text);
+  assert.equal(kfcItems.length, 3);
+  assert.deepEqual(
+    kfcItems.map((i) => i.amount),
+    [19091, 14545, 11818],
+  );
+
+  const taburai = DEMO_EXTRA_RECEIPTS.find((r) => r.id === "demo-doc-taburai-receipt");
+  assert.equal(detectReceiptTotal(taburai), 142100);
+  const taburaiItems = parseReceiptLineItems(taburai.text);
+  assert.equal(taburaiItems.length, 2);
+  assert.deepEqual(
+    taburaiItems.map((i) => i.amount),
+    [74600, 67500],
+  );
+
+  const initial = buildInitialDemoSplits();
+  assert.equal(initial.splits.length, 2);
+  const incoming = initial.splits.find((s) => s.id === "demo-split-incoming-kfc");
+  assert.ok(incoming);
+  assert.ok(incoming.participantEmails.includes(DEMO_ACCOUNT_EMAIL));
+  const myIncomingShare = initial.sharesBySplit[incoming.id].find(
+    (sh) => sh.participantEmail === DEMO_ACCOUNT_EMAIL,
+  );
+  assert.equal(myIncomingShare.status, "pending");
+  assert.equal(myIncomingShare.amount, 16000);
+
+  const outgoing = initial.splits.find((s) => s.id === "demo-split-outgoing-taburai");
+  assert.ok(outgoing);
+  assert.equal(outgoing.organizerEmail, DEMO_ACCOUNT_EMAIL);
+  assert.equal(initial.sharesBySplit[outgoing.id][0].status, "paid_pending_confirm");
 });

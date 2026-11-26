@@ -14,12 +14,14 @@ import {
   REDACTED_RECEIPT_SEED_KEY,
   LOCAL_RECEIPT_SEED_KEY,
   LOCAL_RECEIPT_EXPANSION_SEED_KEY,
+  DEMO_EXTRA_RECEIPTS_SEED_KEY,
   DEMO_WORKFLOW_SEED_KEY,
   isDemoMode,
   buildDemoSeed,
   buildDemoWorkflowSeed,
   loadRedactedReceiptFixtures,
   loadLocalReceiptFixtures,
+  loadExtraDemoReceiptFixtures,
 } from "./demo.js";
 import {
   DEMO_EXPANSION_SEED_KEY,
@@ -243,6 +245,11 @@ export function ensureDemoSeeded() {
         DEMO_EXPANSION_SEED_KEY,
         buildExpandedDemoSeed,
       );
+      const extraReceiptsSeeded = await seedDemoBatch(
+        database,
+        DEMO_EXTRA_RECEIPTS_SEED_KEY,
+        async () => buildDemoSeed(await loadExtraDemoReceiptFixtures()),
+      );
       return {
         seeded:
           seeded ||
@@ -250,7 +257,8 @@ export function ensureDemoSeeded() {
           photosSeeded ||
           morePhotosSeeded ||
           workflowSeeded ||
-          expandedSeeded,
+          expandedSeeded ||
+          extraReceiptsSeeded,
       };
     })().catch((err) => {
       seedPromise = null;
@@ -258,6 +266,23 @@ export function ensureDemoSeeded() {
     });
   }
   return seedPromise;
+}
+
+export async function getDemoMeta(key) {
+  if (!key) return null;
+  const database = await getDB(true, "");
+  const entry = await database.get("meta", key);
+  return entry ? entry.value ?? entry : null;
+}
+
+export async function setDemoMeta(key, value) {
+  if (!key) return;
+  const database = await getDB(true, "");
+  await database.put("meta", {
+    key,
+    value,
+    updatedAt: Date.now(),
+  });
 }
 
 export async function stage(blob, meta) {

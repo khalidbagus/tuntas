@@ -78,7 +78,11 @@ export function AskPaperworkPanel({ docs = [], actions = [], online = true }) {
     }
   };
 
-  const quickPrompts = [t("askSamplePromptSpending"), t("askSamplePromptRenewal")];
+  const quickPrompts = [
+    t("askSamplePromptSpending"),
+    t("askSamplePromptRenewal"),
+    t("askSamplePromptDinner"),
+  ];
 
   return (
     <section className="ask-card" aria-label={t("askPaperworkHeading")}>

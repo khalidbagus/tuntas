@@ -9,6 +9,7 @@ export const REDACTED_RECEIPT_SOURCE = "Redacted receipt sample";
 export const LOCAL_RECEIPT_SEED_KEY = "demo-local-receipts-v1";
 export const LOCAL_RECEIPT_EXPANSION_SEED_KEY = "demo-local-receipts-5-8-v1";
 export const LOCAL_RECEIPT_SOURCE = "Photographed receipt";
+export const DEMO_EXTRA_RECEIPTS_SEED_KEY = "demo-extra-receipts-v1";
 export const DEMO_WORKFLOW_SEED_KEY = "demo-connected-workflow-v1";
 export const DEMO_RENEWAL_GROUP_ID = "demo-group-household-renewal";
 
@@ -287,23 +288,188 @@ export async function loadRedactedReceiptFixtures() {
         new Uint8Array(await blob.slice(0, 8).arrayBuffer()),
       );
       const quote = `${receipt.label} : ${receipt.total}`;
+    return {
+      id: receipt.id,
+      created: receipt.created,
+      title: receipt.title,
+      name: receipt.name,
+      blob,
+      source: REDACTED_RECEIPT_SOURCE,
+      mode: "Redacted receipt sample · fields entered manually",
+      category: "Purchases",
+      status: "organized",
+      autoFiled: false,
+      reviewed: true,
+      reason: "",
+      tags: ["receipt", "photo", "redacted", "IDR"],
+      evidence: quote,
+      text: `${receipt.title}\n${quote}\nCurrency: IDR`,
+      facts: [{ label: "Total (IDR)", value: receipt.total, quote }],
+    };
+  }),
+  );
+}
+
+export const DEMO_EXTRA_RECEIPTS = [
+  {
+    id: "demo-doc-kfc-receipt",
+    path: "/demo-documents/digital_receipt_1.pdf",
+    mime: "application/pdf",
+    name: "digital_receipt_1.pdf",
+    title: "KFC Kota Kasablanka order receipt",
+    total: "50.000",
+    created: Date.UTC(2026, 10, 22, 13, 10),
+    tags: ["receipt", "pdf", "food", "QRIS", "IDR"],
+    evidence: "TOTAL : Rp50.000",
+    text: [
+      "KFC Kota Kasablanka order receipt",
+      "ORDER TYPE : Dine-In",
+      "ORDER DATE : 17 Nov 2026",
+      "1 Lado Ijo Don Rp19.091",
+      "1 Iced Matcha Latte Rp14.545",
+      "1 Spaghetti Deluxe Rp11.818",
+      "Restaurant Tax (10%) : Rp4.545",
+      "Rounding : Rp1",
+      "TOTAL : Rp50.000",
+      "PAYMENT : Paid By QRIS",
+      "Currency: IDR",
+    ].join("\n"),
+    facts: [
+      { label: "Merchant", value: "KFC Kota Kasablanka", quote: "KFC Kota Kasablanka order receipt" },
+      { label: "Total (IDR)", value: "50.000", quote: "TOTAL : Rp50.000" },
+      { label: "Payment", value: "Paid By QRIS", quote: "PAYMENT : Paid By QRIS" },
+    ],
+  },
+  {
+    id: "demo-doc-asics-receipt",
+    path: "/demo-receipts/receipt_5.jpeg",
+    mime: "image/jpeg",
+    name: "receipt_5.jpeg",
+    title: "ASICS Kota Kasablanka shoe receipt",
+    total: "1.359.200",
+    created: Date.UTC(2026, 10, 22, 11, 35),
+    tags: ["receipt", "photo", "shoes", "shopping", "IDR"],
+    evidence: "Grand Total : Rp1.359.200",
+    text: [
+      "ASICS Kota Kasablanka shoe receipt",
+      "Merchant: ASICS Kota Kasablanka",
+      "Date: 27 Jun 2026",
+      "ASI GEL CHALLENGER 15 (A/W, WH) Rp1.359.200",
+      "Discount: -Rp339.800",
+      "Grand Total : Rp1.359.200",
+      "Payment: GPAY",
+      "Currency: IDR",
+    ].join("\n"),
+    facts: [
+      { label: "Merchant", value: "ASICS Kota Kasablanka", quote: "Merchant: ASICS Kota Kasablanka" },
+      { label: "Item", value: "ASI GEL CHALLENGER 15 (A/W, WH)", quote: "ASI GEL CHALLENGER 15 (A/W, WH) Rp1.359.200" },
+      { label: "Total (IDR)", value: "1.359.200", quote: "Grand Total : Rp1.359.200" },
+    ],
+  },
+  {
+    id: "demo-doc-jiwa-receipt",
+    path: "/demo-receipts/receipt_6.jpeg",
+    mime: "image/jpeg",
+    name: "receipt_6.jpeg",
+    title: "Kopi Janji Jiwa takeaway coffee receipt",
+    total: "23.000",
+    created: Date.UTC(2026, 10, 22, 14, 35),
+    tags: ["receipt", "photo", "coffee", "takeaway", "IDR"],
+    evidence: "Total Pembayaran : Rp23.000",
+    text: [
+      "Kopi Janji Jiwa takeaway coffee receipt",
+      "Lokasi Outlet: MALL KOTA KASABLANKA",
+      "Date: 22 Nov 2026",
+      "1x Sahabat Caramel Latte Large (Cup 1) Rp11.500",
+      "1x Sahabat Caramel Latte Large (Cup 2) Rp11.500",
+      "Total Pembayaran : Rp23.000",
+      "Payment: OVO + Jiwa Point",
+      "Currency: IDR",
+    ].join("\n"),
+    facts: [
+      { label: "Merchant", value: "Mall Kota Kasablanka (Jiwa+)", quote: "Lokasi Outlet: MALL KOTA KASABLANKA" },
+      { label: "Item", value: "1x B1G1 Large Sahabat Series", quote: "1x Sahabat Caramel Latte Large (Cup 1) Rp11.500" },
+      { label: "Total (IDR)", value: "23.000", quote: "Total Pembayaran : Rp23.000" },
+    ],
+  },
+  {
+    id: "demo-doc-taburai-receipt",
+    path: "/demo-receipts/receipt_7.jpeg",
+    mime: "image/jpeg",
+    name: "receipt_7.jpeg",
+    title: "Warung Taburai handwritten dinner bill",
+    total: "142.100",
+    created: Date.UTC(2026, 10, 22, 19, 15),
+    tags: ["receipt", "photo", "restaurant", "dinner", "IDR"],
+    evidence: "Jumlah Rp. 142.100",
+    text: [
+      "Warung Taburai handwritten dinner bill",
+      "Merchant: Warung Taburai · Nota No. 08916",
+      "Date: 22 Nov 2026",
+      "1 Pkt Ayam Bakar Rp74.600",
+      "1 Pkt Premium Komplit Rp67.500",
+      "Jumlah Rp. 142.100",
+      "Currency: IDR",
+    ].join("\n"),
+    facts: [
+      { label: "Merchant", value: "Warung Taburai", quote: "Merchant: Warung Taburai · Nota No. 08916" },
+      { label: "Total (IDR)", value: "142.100", quote: "Jumlah Rp. 142.100" },
+    ],
+  },
+  {
+    id: "demo-doc-haus-receipt",
+    path: "/demo-receipts/receipt_8.jpeg",
+    mime: "image/jpeg",
+    name: "receipt_8.jpeg",
+    title: "Haus! Tebet milk tea receipt",
+    total: "66.000",
+    created: Date.UTC(2026, 10, 22, 21, 46),
+    tags: ["receipt", "photo", "drinks", "tea", "IDR"],
+    evidence: "Grand Total : 66.000",
+    text: [
+      "Haus! Tebet milk tea receipt",
+      "Merchant: Haus! JKT - Tebet (GrabFood)",
+      "Date: 22 Nov 2026",
+      "1x Jasmine Green Milk Tea Rp32.000",
+      "1x Osmanthus Oolong Milk Tea Rp34.000",
+      "Grand Total : 66.000",
+      "Currency: IDR",
+    ].join("\n"),
+    facts: [
+      { label: "Merchant", value: "Haus! JKT - Tebet", quote: "Merchant: Haus! JKT - Tebet (GrabFood)" },
+      { label: "Total (IDR)", value: "66.000", quote: "Grand Total : 66.000" },
+    ],
+  },
+];
+
+export async function loadExtraDemoReceiptFixtures() {
+  return Promise.all(
+    DEMO_EXTRA_RECEIPTS.map(async (receipt) => {
+      const response = await fetch(receipt.path);
+      if (!response.ok) throw Error(`Could not load ${receipt.name}.`);
+      const blob = await response.blob();
+      validateFile(
+        blob.size,
+        receipt.mime,
+        new Uint8Array(await blob.slice(0, 8).arrayBuffer()),
+      );
       return {
         id: receipt.id,
         created: receipt.created,
         title: receipt.title,
         name: receipt.name,
         blob,
-        source: REDACTED_RECEIPT_SOURCE,
-        mode: "Redacted receipt sample · fields entered manually",
+        source: "Demo sample",
+        mode: "Demo receipt sample · fields entered manually",
         category: "Purchases",
         status: "organized",
         autoFiled: false,
         reviewed: true,
         reason: "",
-        tags: ["receipt", "photo", "redacted", "IDR"],
-        evidence: quote,
-        text: `${receipt.title}\n${quote}\nCurrency: IDR`,
-        facts: [{ label: "Total (IDR)", value: receipt.total, quote }],
+        tags: [...receipt.tags],
+        evidence: receipt.evidence,
+        text: receipt.text,
+        facts: receipt.facts.map((f) => ({ ...f })),
       };
     }),
   );

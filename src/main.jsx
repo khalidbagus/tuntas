@@ -37,6 +37,7 @@ import { AuthEntryScreen } from "./auth-entry.jsx";
 import { Capture, Detail } from "./forms.jsx";
 import { SplitDetailPage } from "./split-view.jsx";
 import { fetchUserSplits } from "./splits-service.js";
+import { fetchDemoSplits } from "./demo-splits.js";
 import {
   snapshot,
   change,
@@ -277,7 +278,15 @@ function App() {
   };
   const say = (message, bad = false) => setNotice({ message, bad });
   const refreshSplits = async (u = userRef.current) => {
-    if (demoMode || !firebaseAuthConfigured || !u?.uid || !navigator.onLine) {
+    if (demoMode) {
+      try {
+        setSplitsData(await fetchDemoSplits());
+      } catch {
+        setSplitsData({ outgoing: [], incoming: [] });
+      }
+      return;
+    }
+    if (!firebaseAuthConfigured || !u?.uid || !navigator.onLine) {
       setSplitsData({ outgoing: [], incoming: [] });
       return;
     }
@@ -313,7 +322,10 @@ function App() {
         const currentPage = readRoute().replace(/^\//, "").split("/")[0];
         if (currentPage === "login") navTo("/home");
       }
-      if (demoMode) await ensureDemoSeeded();
+      if (demoMode) {
+        await ensureDemoSeeded();
+        await refreshSplits();
+      }
       await refresh(nextUid);
       if (!alive) return;
       setAuthChecked(true);
@@ -1057,6 +1069,7 @@ function App() {
             <SplitDetailPage
               splitId={id}
               user={user}
+              demo={demoMode}
               online={online}
               aiModule={ai}
               onConfirmShareActionDone={async (splitIdArg, shareIdArg) => {

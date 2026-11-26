@@ -518,7 +518,7 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
   ).toHaveAccessibleName(/Inbox.*\b2$/);
   await expect(
     workspace.getByRole("link", { name: /^Library/ }),
-  ).toHaveAccessibleName(/Library.*\b12$/);
+  ).toHaveAccessibleName(/Library.*\b17$/);
   await expect(
     workspace.getByRole("link", { name: /^Actions/ }),
   ).toHaveAccessibleName(/Actions.*\b7$/);
@@ -530,7 +530,7 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
   ).toHaveAccessibleName(/Inbox.*\b2$/);
   await expect(
     workspace.getByRole("link", { name: /^Library/ }),
-  ).toHaveAccessibleName(/Library.*\b12$/);
+  ).toHaveAccessibleName(/Library.*\b17$/);
   await expect(
     workspace.getByRole("link", { name: /^Actions/ }),
   ).toHaveAccessibleName(/Actions.*\b7$/);
@@ -538,7 +538,7 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
   // Tab 2 sees the same filed documents in Library with zero duplicates.
   await tab2.getByRole("link", { name: "Library", exact: true }).first().click();
   await expect(tab2).toHaveURL(/\?demo=1#\/library$/);
-  await expect(tab2.getByText("12 documents")).toBeVisible();
+  await expect(tab2.getByText("17 documents")).toBeVisible();
   await tab2.close();
 
   // Demo mode stays active across Inbox, Library, Document Detail, Actions, and Capture.
@@ -546,7 +546,7 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
   await expect(page).toHaveURL(/\?demo=1#\/inbox$/);
   await page.getByRole("link", { name: "Library", exact: true }).first().click();
   await expect(page).toHaveURL(/\?demo=1#\/library$/);
-  await expect(page.getByText("12 documents")).toBeVisible();
+  await expect(page.getByText("17 documents")).toBeVisible();
 
   // Verify all four redacted receipt photos are labeled, searchable by total, and open cleanly.
   for (const [title, total] of [
@@ -570,7 +570,7 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
     await page.getByRole("link", { name: "Library", exact: true }).first().click();
   }
   await page.getByLabel("Search documents").fill("");
-  await expect(page.getByText("12 documents")).toBeVisible();
+  await expect(page.getByText("17 documents")).toBeVisible();
 
   await page
     .getByRole("link", { name: /Household membership renewal notice/ })
@@ -805,7 +805,7 @@ test("demo mode: already-seeded demo receives new examples without losing edits"
   );
 
   await page.goto("/?demo=1#/library");
-  await expect(page.getByText("9 documents")).toBeVisible();
+  await expect(page.getByText("14 documents")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Custom edited renewal/ }),
   ).toBeVisible();
@@ -817,6 +817,11 @@ test("demo mode: already-seeded demo receives new examples without losing edits"
     "Ice cream counter receipt",
     "Rice bowl takeaway bill",
     "Delivery meal receipt",
+    "KFC Kota Kasablanka order receipt",
+    "ASICS Kota Kasablanka shoe receipt",
+    "Kopi Janji Jiwa takeaway coffee receipt",
+    "Warung Taburai handwritten dinner bill",
+    "Haus! Tebet milk tea receipt",
   ]) {
     await expect(
       page.getByRole("link", { name: new RegExp(title) }),
@@ -832,7 +837,7 @@ test("demo mode: already-seeded demo receives new examples without losing edits"
   await expect(group.getByText("2 of 4 steps completed")).toBeVisible();
 
   await page.goto("/?demo=1#/library");
-  await expect(page.getByText("9 documents")).toBeVisible();
+  await expect(page.getByText("14 documents")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Custom edited renewal/ }),
   ).toBeVisible();
@@ -958,7 +963,7 @@ test("Enhancement A: illustrated Library category tiles, combined search, artwor
     "aria-pressed",
     "true",
   );
-  await expect(picker.getByRole("button", { name: /Purchases/ })).toContainText("5");
+  await expect(picker.getByRole("button", { name: /Purchases/ })).toContainText("10");
   await expect(picker.getByRole("button", { name: /Home & Living/ })).toContainText("2");
   for (const category of ["Money & Bills", "Personal Records", "Other"]) {
     await expect(picker.getByRole("button", { name: new RegExp(category) })).toContainText("1");
@@ -972,7 +977,7 @@ test("Enhancement A: illustrated Library category tiles, combined search, artwor
 
   // Combine category filter and search query, then reset category while keeping query.
   await picker.getByRole("button", { name: /Purchases/ }).click();
-  await expect(page.getByText("5 documents")).toBeVisible();
+  await expect(page.getByText("10 documents")).toBeVisible();
   await page.getByLabel("Search documents").fill("184.000");
   await expect(page.getByText("1 document", { exact: true })).toBeVisible();
   await picker.getByRole("button", { name: /Home & Living/ }).click();
@@ -981,13 +986,13 @@ test("Enhancement A: illustrated Library category tiles, combined search, artwor
   await expect(page.getByLabel("Search documents")).toHaveValue("184.000");
   await expect(page.getByText("1 document", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Clear search" }).click();
-  await expect(page.getByText("12 documents")).toBeVisible();
+  await expect(page.getByText("17 documents")).toBeVisible();
 
   await picker.getByRole("button", { name: /Home & Living/ }).click();
   await page.getByLabel("Search documents").fill("184.000");
   await expect(page.getByText("No matching documents")).toBeVisible();
   await page.getByRole("button", { name: "Clear search and filters" }).click();
-  await expect(page.getByText("12 documents")).toBeVisible();
+  await expect(page.getByText("17 documents")).toBeVisible();
   await expect(picker.getByRole("button", { name: /All Documents/ })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -1551,9 +1556,9 @@ test("Delete filed document: cancel default focus, cascade actions/links, reload
   await idConfirm.getByRole("button", { name: "Hapus permanen" }).click();
   await expect(page).toHaveURL(/\?demo=1#\/library$/);
   await expect(page.getByRole("status")).toContainText("Dokumen dihapus.");
-  await expect(page.getByText("11 dokumen", { exact: true })).toBeVisible();
+  await expect(page.getByText("16 dokumen", { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByText("11 dokumen", { exact: true })).toBeVisible();
+  await expect(page.getByText("16 dokumen", { exact: true })).toBeVisible();
 
   await page.goto("/?demo=1#/actions");
   const demoGroup = page.getByRole("region", { name: "Training reimbursement" });
@@ -1746,9 +1751,10 @@ test("Milestones 3 & 4: Split Bill Phase 1 on IDR receipt and Ask Your Paperwork
   await askSection.getByRole("button", { name: "How much did I spend on receipts?" }).click();
   const answerRegion = askSection.getByRole("region", { name: "Paperwork answer" });
   await expect(answerRegion).toBeVisible();
-  await expect(answerRegion).toContainText("432,142");
+  await expect(answerRegion).toContainText("2,072,442");
+  await expect(answerRegion.locator(".ask-citation-link")).toHaveCount(5);
   await expect(
-    answerRegion.getByRole("link", { name: /Restaurant dinner receipt/ }),
+    answerRegion.getByRole("link", { name: /KFC Kota Kasablanka order receipt/ }),
   ).toBeVisible();
 
   // Check WCAG AA + 360px mobile overflow with Ask Your Paperwork open
@@ -1769,4 +1775,86 @@ test("Milestones 3 & 4: Split Bill Phase 1 on IDR receipt and Ask Your Paperwork
     .getByRole("link", { name: /Household membership renewal notice/ })
     .click();
   await expect(page).toHaveURL(/\?demo=1#\/document\/demo-doc-renewal$/);
+});
+
+test("Demo extra receipts, itemized prefill, and interactive Demo Shared Split Bills with reload & WCAG AA", async ({
+  page,
+}) => {
+  await page.goto("/?demo=1#/library");
+  await expect(page.getByText("17 documents")).toBeVisible();
+
+  // 1. Verify KFC PDF original downloads cleanly and Itemized Split Bill pre-populates 3 dishes + 4546 tax
+  await page.getByRole("link", { name: /KFC Kota Kasablanka order receipt/ }).click();
+  await page.getByText("Original document", { exact: true }).click();
+  const kfcDownload = page.getByRole("link", { name: "Download original" });
+  await expect(kfcDownload).toHaveAttribute("download", "digital_receipt_1.pdf");
+
+  await page.getByRole("button", { name: "Split bill" }).click();
+  const kfcSplit = page.getByRole("region", { name: "Create split bill" });
+  await kfcSplit.getByRole("button", { name: "Itemized" }).click();
+  await expect(kfcSplit.getByLabel("Item name")).toHaveCount(3);
+  await expect(kfcSplit.getByLabel("Item name").first()).toHaveValue("1 Lado Ijo Don");
+  await expect(kfcSplit.getByLabel("Tax & service charge")).toHaveValue("4546");
+
+  // 2. Verify all 4 new photo receipts decode real <img> originals & Warung Taburai itemized items
+  for (const docId of [
+    "demo-doc-asics-receipt",
+    "demo-doc-jiwa-receipt",
+    "demo-doc-haus-receipt",
+    "demo-doc-taburai-receipt",
+  ]) {
+    await page.goto(`/?demo=1#/document/${docId}`);
+    await page.getByText("Original document", { exact: true }).click();
+    const img = page.getByRole("img", { name: "Original captured document" });
+    await expect(img).toBeVisible();
+    await expect
+      .poll(() => img.evaluate((el) => el.complete && el.naturalWidth > 0))
+      .toBeTruthy();
+  }
+
+  await page.getByRole("button", { name: "Split bill" }).click();
+  const taburaiSplit = page.getByRole("region", { name: "Create split bill" });
+  await taburaiSplit.getByRole("button", { name: "Itemized" }).click();
+  await expect(taburaiSplit.getByLabel("Item name")).toHaveCount(2);
+  await expect(taburaiSplit.getByLabel("Item name").first()).toHaveValue("1 Pkt Ayam Bakar");
+
+  // 3. Interactive Demo Shared Split Bills in Actions (Incoming accept + proof, Outgoing confirm)
+  await page.goto("/?demo=1#/actions");
+  const sharedSection = page.getByRole("region", { name: "Shared split bills" });
+  await expect(sharedSection).toBeVisible();
+
+  await sharedSection.getByRole("link", { name: /KFC Kota Kasablanka team lunch/ }).click();
+  await expect(page).toHaveURL(/\?demo=1#\/split\/demo-split-incoming-kfc$/);
+  await expect(page.getByText("Demo preview · stored locally")).toBeVisible();
+
+  const inAxe = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(inAxe.violations).toEqual([]);
+
+  await page.getByRole("button", { name: "Accept share" }).click();
+  await page.getByLabel(/Transfer reference/).fill("Transfer QRIS 16000 ref QRIS-9921");
+  await page.getByRole("button", { name: "Verify proof" }).click();
+  await expect(page.getByRole("status")).toContainText("QRIS-9921");
+  await page.getByRole("button", { name: "Submit payment proof" }).click();
+  await expect(page.getByText("Proof submitted")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Proof submitted")).toBeVisible();
+
+  // Outgoing split: confirm Siti Rahma's submitted proof -> Confirmed
+  await page.goto("/?demo=1#/actions");
+  await sharedSection
+    .getByRole("link", { name: /Warung Taburai handwritten dinner bill/ })
+    .click();
+  await expect(page).toHaveURL(/\?demo=1#\/split\/demo-split-outgoing-taburai$/);
+
+  const outAxe = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(outAxe.violations).toEqual([]);
+
+  await page.getByRole("button", { name: "Confirm payment received" }).click();
+  await expect(page.getByText("Confirmed").first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Confirmed").first()).toBeVisible();
 });

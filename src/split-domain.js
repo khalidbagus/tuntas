@@ -120,7 +120,11 @@ export function parseReceiptLineItems(text) {
     .filter(Boolean);
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    if (/^(grand\s+)?total|subtotal|tax|service|currency|payment|thank/i.test(line)) {
+    if (
+      /^(grand\s+)?total|subtotal|tax|restaurant\s+tax|service|rounding|discount|bill\s+no|receipt\s+no|receipt\s+number|nota\s+no|order\s+date|order\s+type|date|tanggal|currency|payment|thank|jumlah|merchant|lokasi/i.test(
+        line,
+      )
+    ) {
       continue;
     }
     const m = /^(.{2,60}?)\s+(?:IDR|USD|SGD|EUR|GBP|Rp|S\$|\$|€|£)?\s*(\d[\d.,]*)$/.exec(

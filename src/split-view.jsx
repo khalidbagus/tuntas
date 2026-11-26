@@ -38,6 +38,14 @@ import {
   organizerUpdateShareStatus,
   respondToSplitShare,
 } from "./splits-service.js";
+import {
+  DEMO_USER_UID,
+  createDemoSplit,
+  fetchDemoSplitById,
+  organizerUpdateDemoShareStatus,
+  respondToDemoSplitShare,
+} from "./demo-splits.js";
+import { DEMO_ACCOUNT_EMAIL } from "./demo.js";
 import { configured } from "./engine.js";
 import { supportsDeviceAI } from "./device-ai.js";
 import { useLang } from "./lang.js";
@@ -95,7 +103,20 @@ export function SplitBillBuilder({
       ? parsed.map((item) => ({ ...item, assigneeIds: [] }))
       : [{ id: "item-1", name: "", amount: "", assigneeIds: [] }];
   });
-  const [taxOrTip, setTaxOrTip] = useState("");
+  const [taxOrTip, setTaxOrTip] = useState(() => {
+    const detectedTotal = detectReceiptTotal(doc);
+    const parsed = parseReceiptLineItems(doc?.text || "");
+    if (!parsed.length || detectedTotal <= 0) return "";
+    const itemsSum = parsed.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const diff = detectedTotal - itemsSum;
+    if (diff > 0 && diff < detectedTotal * 0.35) {
+      const decimals = detectReceiptCurrency(doc, lang) === "IDR" ? 0 : 2;
+      const factor = 10 ** decimals;
+      const rounded = Math.round(diff * factor) / factor;
+      return rounded > 0 ? String(rounded) : "";
+    }
+    return "";
+  });
   const [paymentInstructions, setPaymentInstructions] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -114,13 +135,15 @@ export function SplitBillBuilder({
 
   const nonSelfShares = shares.filter((s) => !s.isSelf);
   const effectiveTotal = splitMode === "itemized" ? computedTotal : numericTotal;
+  const hasInviteEmail = nonSelfShares.some((s) => isValidEmail(s.email));
   const canPublishCloud = Boolean(
-    !demo &&
-      authConfigured &&
-      user &&
-      online &&
-      nonSelfShares.some((s) => isValidEmail(s.email)),
+    !demo && authConfigured && user && online && hasInviteEmail,
   );
+  const canPublishDemo = Boolean(demo && hasInviteEmail);
+  const splitInviteBase =
+    (globalThis.location?.origin || "") +
+    (globalThis.location?.pathname || "/") +
+    (demo ? "?demo=1" : "");
 
   const copyText = async (key, value) => {
     try {
@@ -134,7 +157,9 @@ export function SplitBillBuilder({
 
   if (createdResult) {
     const { split, shares: createdShares, published } = createdResult;
-    const inviteUrl = published ? buildSplitInviteUrl(split.id) : "";
+    const inviteUrl = published
+      ? buildSplitInviteUrl(split.id, splitInviteBase)
+      : "";
     return (
       <section className="split-builder" aria-label={t("splitBillTitle")}>
         <div className="followup-top">
@@ -493,7 +518,7 @@ export function SplitBillBuilder({
         />
       </label>
 
-      {!demo && authConfigured && user && (
+      {(canPublishDemo || (!demo && authConfigured && user)) && (
         <small className="muted-copy">{t("splitEmailInviteNote")}</small>
       )}
 
@@ -519,7 +544,7 @@ export function SplitBillBuilder({
                 participantName: s.name,
                 participantEmail: s.email,
               }));
-              if (canPublishCloud) {
+              if (canPublishCloud || canPublishDemo) {
                 const itemsSummary =
                   splitMode === "itemized"
                     ? items
@@ -527,17 +552,27 @@ export function SplitBillBuilder({
                         .map((it) => `${it.name}: ${it.amount}`)
                         .join("; ")
                     : "";
-                const res = await createSharedSplit({
-                  organizerUid: user.uid,
-                  organizerEmail: user.email,
-                  title: doc.title,
-                  currency,
-                  totalAmount: effectiveTotal,
-                  splitMode,
-                  itemsSummary,
-                  paymentInstructions: paymentInstructions.trim(),
-                  shares,
-                });
+                const res = canPublishDemo
+                  ? await createDemoSplit({
+                      title: doc.title,
+                      currency,
+                      totalAmount: effectiveTotal,
+                      splitMode,
+                      itemsSummary,
+                      paymentInstructions: paymentInstructions.trim(),
+                      shares,
+                    })
+                  : await createSharedSplit({
+                      organizerUid: user.uid,
+                      organizerEmail: user.email,
+                      title: doc.title,
+                      currency,
+                      totalAmount: effectiveTotal,
+                      splitMode,
+                      itemsSummary,
+                      paymentInstructions: paymentInstructions.trim(),
+                      shares,
+                    });
                 publishedSplit = res.split;
                 publishedShares = res.shares;
                 onSplitPublished?.();
@@ -586,6 +621,7 @@ export function SplitBillBuilder({
 export function SplitDetailPage({
   splitId,
   user = null,
+  demo = false,
   online = true,
   aiModule = null,
   onConfirmShareActionDone,
@@ -607,15 +643,21 @@ export function SplitDetailPage({
   const [gpayUnavailable, setGpayUnavailable] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const activeUser = demo
+    ? { uid: DEMO_USER_UID, email: DEMO_ACCOUNT_EMAIL }
+    : user;
+
   const load = async () => {
-    if (!user?.uid || !splitId) {
+    if (!activeUser?.uid || !splitId) {
       setLoading(false);
       return;
     }
     setLoading(true);
     setError("");
     try {
-      const res = await fetchSplitById(splitId, user.uid, user.email);
+      const res = demo
+        ? await fetchDemoSplitById(splitId)
+        : await fetchSplitById(splitId, activeUser.uid, activeUser.email);
       setRecord(res);
     } catch (err) {
       setError(err?.message || t("splitNotFound"));
@@ -626,9 +668,9 @@ export function SplitDetailPage({
 
   useEffect(() => {
     load();
-  }, [splitId, user?.uid]);
+  }, [splitId, activeUser?.uid, demo]);
 
-  if (!user) {
+  if (!activeUser) {
     return (
       <Empty icon={Users} title={t("splitSignInRequiredTitle")}>
         <a href="#/login">{t("authTabSignIn")}</a>
@@ -651,11 +693,25 @@ export function SplitDetailPage({
 
   const { split, shares, isOrganizer } = record;
   const splitChip = splitStatusChip(split.status, t);
-  const inviteUrl = buildSplitInviteUrl(split.id);
-  const myEmail = normalizeEmail(user.email);
+  const inviteBaseHref =
+    (globalThis.location?.origin || "") +
+    (globalThis.location?.pathname || "/") +
+    (demo ? "?demo=1" : "");
+  const inviteUrl = buildSplitInviteUrl(split.id, inviteBaseHref);
+  const myEmail = normalizeEmail(activeUser.email);
   const myShare = !isOrganizer
     ? shares.find((s) => s.participantEmail === myEmail) || shares[0]
     : null;
+
+  const handleRespondShare = (sId, shId, payload) =>
+    demo
+      ? respondToDemoSplitShare(sId, shId, payload)
+      : respondToSplitShare(sId, shId, payload);
+
+  const handleOrganizerUpdate = (sId, shId, nextStatus) =>
+    demo
+      ? organizerUpdateDemoShareStatus(sId, shId, nextStatus)
+      : organizerUpdateShareStatus(sId, shId, nextStatus);
 
   const verifyWithAiOrLocal = async (expectedAmount) => {
     setError("");
@@ -714,6 +770,9 @@ export function SplitDetailPage({
         <div className="status-line">
           <span className={splitChip.cls}>{splitChip.label}</span>
           <span className="chip neutral-chip">{split.currency}</span>
+          {demo && (
+            <span className="chip blue">{t("splitDemoInteractiveChip")}</span>
+          )}
           {isOrganizer && (
             <button
               type="button"
@@ -775,9 +834,9 @@ export function SplitDetailPage({
                   onClick={async () => {
                     setBusy(true);
                     try {
-                      await respondToSplitShare(split.id, myShare.id, {
+                      await handleRespondShare(split.id, myShare.id, {
                         status: "accepted",
-                        participantUid: user.uid,
+                        participantUid: activeUser.uid,
                       });
                       await load();
                       onSplitsChanged?.();
@@ -796,9 +855,9 @@ export function SplitDetailPage({
                   onClick={async () => {
                     setBusy(true);
                     try {
-                      await respondToSplitShare(split.id, myShare.id, {
+                      await handleRespondShare(split.id, myShare.id, {
                         status: "declined",
-                        participantUid: user.uid,
+                        participantUid: activeUser.uid,
                       });
                       await load();
                       onSplitsChanged?.();
@@ -887,9 +946,9 @@ export function SplitDetailPage({
                               currency: split.currency,
                             }).summary ||
                             proofText.trim().slice(0, 380);
-                          await respondToSplitShare(split.id, myShare.id, {
+                          await handleRespondShare(split.id, myShare.id, {
                             status: "paid_pending_confirm",
-                            participantUid: user.uid,
+                            participantUid: activeUser.uid,
                             paymentMethod: "qris_bank_ewallet",
                             proofSummary: summary,
                             proofVerifiedByAi: Boolean(proofFeedback?.aiVerified),
@@ -937,9 +996,9 @@ export function SplitDetailPage({
                             currency: split.currency,
                           });
                           if (res.ok) {
-                            await respondToSplitShare(split.id, myShare.id, {
+                            await handleRespondShare(split.id, myShare.id, {
                               status: "paid_pending_confirm",
-                              participantUid: user.uid,
+                              participantUid: activeUser.uid,
                               paymentMethod: "google_pay_sandbox",
                               proofSummary: res.summary,
                               proofVerifiedByAi: false,
@@ -973,9 +1032,9 @@ export function SplitDetailPage({
                               amount: myShare.amount,
                               currency: split.currency,
                             });
-                            await respondToSplitShare(split.id, myShare.id, {
+                            await handleRespondShare(split.id, myShare.id, {
                               status: "paid_pending_confirm",
-                              participantUid: user.uid,
+                              participantUid: activeUser.uid,
                               paymentMethod: "google_pay_sandbox",
                               proofSummary: sim.summary,
                               proofVerifiedByAi: false,
@@ -1036,7 +1095,7 @@ export function SplitDetailPage({
                           onClick={async () => {
                             setBusy(true);
                             try {
-                              await organizerUpdateShareStatus(
+                              await handleOrganizerUpdate(
                                 split.id,
                                 s.id,
                                 "confirmed",
@@ -1059,7 +1118,7 @@ export function SplitDetailPage({
                           onClick={async () => {
                             setBusy(true);
                             try {
-                              await organizerUpdateShareStatus(
+                              await handleOrganizerUpdate(
                                 split.id,
                                 s.id,
                                 "accepted",
