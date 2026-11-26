@@ -18,7 +18,9 @@ import {
   Sparkles,
   GitBranch,
   ArrowRight,
+  Users,
 } from "lucide-react";
+import { SplitBillBuilder } from "./split-view.jsx";
 import { Heading, date } from "./ui.jsx";
 import { configured } from "./engine.js";
 import { original } from "./db.js";
@@ -367,6 +369,12 @@ export function Detail({
   dismissFollowUp,
   applyTemplate,
   dismissTemplate,
+  user = null,
+  authConfigured = false,
+  online = true,
+  demo = false,
+  onCreateSplitWorkflow,
+  onSplitPublished,
   modeProps,
   ready,
   busy,
@@ -376,6 +384,7 @@ export function Detail({
   const locale = localeFor(lang);
   const [editing, setEditing] = useState(false),
     [adding, setAdding] = useState(false),
+    [splitting, setSplitting] = useState(false),
     [confirmingDelete, setConfirmingDelete] = useState(false),
     [deletingDoc, setDeletingDoc] = useState(false),
     [applyingTemplate, setApplyingTemplate] = useState(false),
@@ -886,12 +895,29 @@ export function Detail({
               disabled={deletingDoc}
               onClick={() => {
                 setConfirmingDelete(false);
+                setSplitting(false);
                 openManualAction();
               }}
             >
               <Plus size={17} aria-hidden="true" />
               {t("addAnAction")}
             </button>
+            {onCreateSplitWorkflow && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={deletingDoc}
+                aria-expanded={splitting}
+                onClick={() => {
+                  setConfirmingDelete(false);
+                  setAdding(false);
+                  setSplitting((v) => !v);
+                }}
+              >
+                <Users size={17} aria-hidden="true" />
+                <span>{t("splitThisBill")}</span>
+              </button>
+            )}
             {doc.autoFiled && (
               <button
                 type="button"
@@ -919,6 +945,18 @@ export function Detail({
               </button>
             )}
           </div>
+        )}
+        {filed && splitting && onCreateSplitWorkflow && (
+          <SplitBillBuilder
+            doc={doc}
+            user={user}
+            authConfigured={authConfigured}
+            online={online}
+            demo={demo}
+            onCreateWorkflow={onCreateSplitWorkflow}
+            onSplitPublished={onSplitPublished}
+            onClose={() => setSplitting(false)}
+          />
         )}
         {filed && confirmingDelete && remove && (
           <section

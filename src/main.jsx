@@ -35,6 +35,8 @@ import { Actions } from "./actions-view.jsx";
 import { AccountPage } from "./account-view.jsx";
 import { AuthEntryScreen } from "./auth-entry.jsx";
 import { Capture, Detail } from "./forms.jsx";
+import { SplitDetailPage } from "./split-view.jsx";
+import { fetchUserSplits } from "./splits-service.js";
 import {
   snapshot,
   change,
@@ -48,6 +50,8 @@ import {
   addDependency,
   removeDependency,
   applyWorkflowTemplate,
+  createSplitActionWorkflow,
+  markSplitShareActionDone,
   ensureDemoSeeded,
   setActiveWorkspaceUid,
   getSyncMeta,
@@ -175,6 +179,7 @@ function App() {
     [syncMeta, setSyncMeta] = useState(defaultSyncMeta),
     [remoteSyncDetected, setRemoteSyncDetected] = useState(false),
     [localSummary, setLocalSummary] = useState(defaultLocalSummary),
+    [splitsData, setSplitsData] = useState({ outgoing: [], incoming: [] }),
     running = useRef(false),
     userRef = useRef(null),
     syncUnsubRef = useRef(null);
@@ -214,6 +219,7 @@ function App() {
             document: "pageDocument",
             account: "pageAccount",
             login: "authTabSignIn",
+            split: "splitBillKicker",
           }[page] || "pageFallback",
         );
   const doc = data.docs.find((d) => d.id === id);
@@ -270,6 +276,20 @@ function App() {
     });
   };
   const say = (message, bad = false) => setNotice({ message, bad });
+  const refreshSplits = async (u = userRef.current) => {
+    if (demoMode || !firebaseAuthConfigured || !u?.uid || !navigator.onLine) {
+      setSplitsData({ outgoing: [], incoming: [] });
+      return;
+    }
+    try {
+      const next = await fetchUserSplits(u.uid, u.email);
+      if (userRef.current?.uid === u.uid) {
+        setSplitsData(next);
+      }
+    } catch {
+      // Non-fatal if splits cannot be read offline
+    }
+  };
   useEffect(() => {
     let alive = true;
     let authUnsub = () => {};
@@ -299,6 +319,7 @@ function App() {
       setAuthChecked(true);
 
       if (!demoMode && nextUid) {
+        refreshSplits(userRef.current).catch(() => {});
         const currentMeta = await getSyncMeta(nextUid);
         if (!alive || userRef.current?.uid !== nextUid) return;
         if (currentMeta.enabled) {
@@ -414,13 +435,18 @@ function App() {
     };
   }, []);
   useEffect(() => {
-    if (configured && (page === "capture" || page === "document"))
+    if (configured && (page === "capture" || page === "document" || page === "split"))
       import("./firebase-ai.js")
         .then(setAI)
         .catch(() =>
           say("Firebase AI could not load. You can use local rules.", true),
         );
   }, [page]);
+  useEffect(() => {
+    if (page === "actions" && !demoMode && firebaseAuthConfigured && user && online) {
+      refreshSplits(user);
+    }
+  }, [page, user?.uid, online, demoMode]);
   useEffect(() => {
     if (showAuthLoading) return;
     if (!loaded && !showStandaloneAuth) return;
@@ -875,6 +901,8 @@ function App() {
             <Library
               {...{
                 docs: data.docs,
+                actions: data.actions,
+                online,
                 query,
                 setQuery,
                 category,
@@ -887,6 +915,7 @@ function App() {
           ) : page === "actions" ? (
             <Actions
               {...data}
+              splitsData={splitsData}
               todayIso={todayIso}
               focusedActionId={id || ""}
               onToggle={(action) =>
@@ -1012,6 +1041,32 @@ function App() {
                   "Workflow template dismissed.",
                 )
               }
+              user={user}
+              authConfigured={firebaseAuthConfigured}
+              online={online}
+              demo={demoMode}
+              onCreateSplitWorkflow={async (opts) => {
+                await createSplitActionWorkflow(doc.id, opts);
+                await refresh();
+                say("Split bill actions created.");
+                syncAfterWrite().catch(() => {});
+              }}
+              onSplitPublished={() => refreshSplits()}
+            />
+          ) : page === "split" && id ? (
+            <SplitDetailPage
+              splitId={id}
+              user={user}
+              online={online}
+              aiModule={ai}
+              onConfirmShareActionDone={async (splitIdArg, shareIdArg) => {
+                const updated = await markSplitShareActionDone(splitIdArg, shareIdArg);
+                if (updated) {
+                  await refresh();
+                  syncAfterWrite().catch(() => {});
+                }
+              }}
+              onSplitsChanged={() => refreshSplits()}
             />
           ) : page === "account" ? (
             <AccountPage
@@ -1050,6 +1105,7 @@ function App() {
               onSignOut={async () => {
                 syncUnsubRef.current?.();
                 syncUnsubRef.current = null;
+                setSplitsData({ outgoing: [], incoming: [] });
                 saveLocalGuestMode(false);
                 setLocalGuestMode(false);
                 await signOutAccount();

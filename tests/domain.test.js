@@ -54,6 +54,24 @@ import {
   buildGoogleCalendarUrl,
 } from "../src/calendar-export.js";
 import {
+  SPLIT_CURRENCIES,
+  detectReceiptCurrency,
+  detectReceiptTotal,
+  calculateShares,
+  buildSplitMailtoHref,
+  verifyTransferProofLocally,
+} from "../src/split-domain.js";
+import {
+  buildGooglePayRequest,
+  createSimulatedGooglePayToken,
+} from "../src/google-pay-demo.js";
+import {
+  tokenizeQuery,
+  extractAmountsFromDoc,
+  retrieveRelevantDocs,
+  answerPaperworkLocally,
+} from "../src/rag-local.js";
+import {
   SYNC_COLLECTIONS,
   tombstoneKey,
   toRemoteDocument,
@@ -1230,4 +1248,134 @@ test("calendar export builds RFC 5545 .ics events and Google Calendar links accu
 
   assert.equal(buildIcsEvent({ id: "a2", title: "No date", due: "" }), null);
   assert.equal(buildGoogleCalendarUrl({ id: "a2", title: "No date", due: "" }), "");
+});
+
+test("split-domain detects IDR/USD totals, splits equally and itemized with exact sum, builds mailto, and verifies proof", () => {
+  assert.deepEqual(SPLIT_CURRENCIES, ["IDR", "USD", "SGD", "EUR", "GBP"]);
+
+  const idrDoc = {
+    tags: ["receipt", "IDR"],
+    facts: [{ label: "Total (IDR)", value: "184.000", quote: "Grand Total : 184.000" }],
+    text: "Restaurant dinner receipt\nGrand Total : 184.000\nCurrency: IDR",
+  };
+  assert.equal(detectReceiptCurrency(idrDoc, "en"), "IDR");
+  assert.equal(detectReceiptTotal(idrDoc), 184000);
+
+  const usdDoc = {
+    tags: ["receipt"],
+    facts: [{ label: "Total", value: "USD 100.00", quote: "Total: USD 100.00" }],
+    text: "Dinner\nTotal: USD 100.00",
+  };
+  assert.equal(detectReceiptCurrency(usdDoc, "en"), "USD");
+  assert.equal(detectReceiptTotal(usdDoc), 100);
+
+  // Equal split of 100 across 3 sums to exactly 100.00
+  const eq = calculateShares({
+    mode: "equal",
+    totalAmount: 100,
+    currency: "USD",
+    participants: [
+      { id: "self", name: "Me", email: "", isSelf: true },
+      { id: "p1", name: "Alice", email: "ALICE@Example.com", isSelf: false },
+      { id: "p2", name: "Bob", email: "bob@example.com", isSelf: false },
+    ],
+  });
+  assert.equal(eq.computedTotal, 100);
+  assert.equal(eq.shares.find((s) => s.id === "p1").email, "alice@example.com");
+
+  // Itemized split with shared dish + tax
+  const itemSplit = calculateShares({
+    mode: "itemized",
+    currency: "IDR",
+    participants: [
+      { id: "self", name: "Me", email: "", isSelf: true },
+      { id: "p1", name: "Budi", email: "budi@example.com", isSelf: false },
+    ],
+    items: [
+      { id: "i1", name: "Nasi Goreng", amount: 50000, assigneeIds: ["self"] },
+      { id: "i2", name: "Satay", amount: 60000, assigneeIds: ["p1"] },
+      { id: "i3", name: "Shared Tea", amount: 20000, assigneeIds: ["self", "p1"] },
+    ],
+    taxOrTip: 13000,
+  });
+  assert.equal(itemSplit.computedTotal, 143000);
+
+  const mailto = buildSplitMailtoHref(
+    {
+      id: "sp-1",
+      title: "Dinner",
+      currency: "USD",
+      paymentInstructions: "Venmo @me",
+    },
+    { participantName: "Bob", participantEmail: "bob@example.com", amount: 33.34 },
+    { inviteUrl: "https://tuntas.app/#/split/sp-1", locale: "en-US" },
+  );
+  assert.ok(mailto.startsWith("mailto:bob%40example.com?subject="));
+  assert.ok(decodeURIComponent(mailto).includes("https://tuntas.app/#/split/sp-1"));
+
+  const proofOk = verifyTransferProofLocally({
+    text: "Transfer successful Rp 92.000 Ref TRX-8821",
+    expectedAmount: 92000,
+    currency: "IDR",
+  });
+  assert.equal(proofOk.matched, true);
+  assert.equal(proofOk.reference, "TRX-8821");
+
+  const gpayReq = buildGooglePayRequest({ amount: 50, currency: "USD" });
+  assert.equal(gpayReq.transactionInfo.totalPrice, "50.00");
+  assert.equal(gpayReq.transactionInfo.currencyCode, "USD");
+  const sim = createSimulatedGooglePayToken({ amount: 50, currency: "USD" });
+  assert.equal(sim.ok, true);
+  assert.match(sim.tokenPreview, /^GPay-SIM-/);
+});
+
+test("rag-local retrieves relevant docs and computes exact multi-receipt totals in EN and ID", () => {
+  const docs = [
+    {
+      id: "d1",
+      title: "Restaurant dinner receipt",
+      category: "Purchases",
+      tags: ["receipt", "IDR"],
+      facts: [{ label: "Total (IDR)", value: "184.000", quote: "Grand Total : 184.000" }],
+      text: "Restaurant dinner receipt\nGrand Total : 184.000\nCurrency: IDR",
+      created: 2000,
+    },
+    {
+      id: "d2",
+      title: "Ice cream counter receipt",
+      category: "Purchases",
+      tags: ["receipt", "IDR"],
+      facts: [{ label: "Total (IDR)", value: "14.000", quote: "Grand Total : 14.000" }],
+      text: "Ice cream counter receipt\nGrand Total : 14.000\nCurrency: IDR",
+      created: 1500,
+    },
+    {
+      id: "d3",
+      title: "Household membership renewal notice",
+      category: "Home & Living",
+      tags: ["renewal", "membership"],
+      facts: [{ label: "Total", value: "USD 48.00", quote: "Total: USD 48.00" }],
+      text: "Household membership renewal notice\nRenew your membership by 12 December 2026.",
+      followUp: { due: "2026-12-12" },
+      created: 1000,
+    },
+  ];
+  const actions = [
+    { id: "a1", documentId: "d3", title: "Submit renewal", due: "2026-12-12", done: false },
+  ];
+
+  assert.deepEqual(tokenizeQuery("How much did I spend on receipts?"), ["spend", "receipts"]);
+  assert.equal(extractAmountsFromDoc(docs[0])[0].amount, 184000);
+  assert.equal(retrieveRelevantDocs(docs, actions, "membership renew")[0].doc.id, "d3");
+
+  const spendEn = answerPaperworkLocally(docs, actions, "How much did I spend on receipts?", "en");
+  assert.match(spendEn.answer, /198[.,]000/);
+  assert.equal(spendEn.citations.length, 2);
+
+  const renewEn = answerPaperworkLocally(docs, actions, "When does household membership renew?", "en");
+  assert.match(renewEn.answer, /2026-12-12/);
+  assert.equal(renewEn.citations[0].docId, "d3");
+
+  const renewId = answerPaperworkLocally(docs, actions, "Kapan keanggotaan rumah tangga diperpanjang?", "id");
+  assert.match(renewId.answer, /2026-12-12/);
 });

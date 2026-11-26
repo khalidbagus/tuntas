@@ -14,7 +14,10 @@ import {
   AlertTriangle,
   CalendarPlus,
   ExternalLink,
+  Users,
+  ChevronRight,
 } from "lucide-react";
+import { formatSplitAmount } from "./split-domain.js";
 import {
   buildGoogleCalendarUrl,
   downloadActionIcs,
@@ -521,6 +524,7 @@ export function Actions({
   actions,
   groups = [],
   dependencies = [],
+  splitsData = { outgoing: [], incoming: [] },
   todayIso = toLocalIsoDate(),
   focusedActionId = "",
   onToggle,
@@ -534,6 +538,7 @@ export function Actions({
 }) {
   const lang = useLang();
   const t = createTranslator(lang);
+  const locale = localeFor(lang);
 
   const [filter, setFilter] = useState("all");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
@@ -742,6 +747,93 @@ export function Actions({
             </button>
           </div>
         </form>
+      )}
+
+      {(splitsData.outgoing?.length > 0 || splitsData.incoming?.length > 0) && (
+        <section className="section" aria-label={t("sharedSplitsHeading")}>
+          <div className="section-top">
+            <div className="section-title">
+              <span className="section-icon">
+                <Users aria-hidden="true" />
+              </span>
+              <h2>{t("sharedSplitsHeading")}</h2>
+            </div>
+          </div>
+          <div className="list">
+            {splitsData.incoming.map(({ split, share }) => (
+              <a
+                key={`in-${split.id}`}
+                className="doc-row"
+                href={`#/split/${split.id}`}
+              >
+                <span className="file-icon">
+                  <Users size={20} aria-hidden="true" />
+                </span>
+                <span className="grow">
+                  <strong>{split.title}</strong>
+                  <small>
+                    {t("splitIncomingSummary", {
+                      amount: formatSplitAmount(share.amount, split.currency, locale),
+                      organizer: split.organizerEmail || t("splitOrganizerLabel"),
+                    })}
+                  </small>
+                </span>
+                <span
+                  className={
+                    "chip " +
+                    (share.status === "confirmed"
+                      ? "green"
+                      : share.status === "declined"
+                        ? "urgency-badge overdue"
+                        : "blue")
+                  }
+                >
+                  {share.status === "confirmed"
+                    ? t("splitStatusConfirmed")
+                    : share.status === "paid_pending_confirm"
+                      ? t("splitStatusProofSubmitted")
+                      : share.status === "accepted"
+                        ? t("splitStatusAccepted")
+                        : share.status === "declined"
+                          ? t("splitStatusDeclined")
+                          : t("splitStatusPending")}
+                </span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </a>
+            ))}
+            {splitsData.outgoing.map(({ split, shares }) => (
+              <a
+                key={`out-${split.id}`}
+                className="doc-row"
+                href={`#/split/${split.id}`}
+              >
+                <span className="file-icon">
+                  <Users size={20} aria-hidden="true" />
+                </span>
+                <span className="grow">
+                  <strong>{split.title}</strong>
+                  <small>
+                    {t("splitOutgoingSummary", {
+                      total: formatSplitAmount(split.totalAmount, split.currency, locale),
+                      confirmed: shares.filter((s) => s.status === "confirmed").length,
+                      count: shares.length,
+                    })}
+                  </small>
+                </span>
+                <span
+                  className={
+                    "chip " + (split.status === "settled" ? "green" : "blue")
+                  }
+                >
+                  {split.status === "settled"
+                    ? t("splitStatusConfirmed")
+                    : t("splitStatusOpen")}
+                </span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </a>
+            ))}
+          </div>
+        </section>
       )}
 
       {!actions.length && !groups.length ? (

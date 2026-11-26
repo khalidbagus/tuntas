@@ -53,6 +53,24 @@ async function createSeededUser({ email, password, emailVerified = true }) {
   return created;
 }
 
+async function closeContexts(...contexts) {
+  await Promise.all(
+    contexts.map(async (ctx) => {
+      try {
+        await Promise.all(
+          ctx.pages().map((p) => p.goto("about:blank").catch(() => {})),
+        );
+        await Promise.race([
+          ctx.close(),
+          new Promise((r) => setTimeout(r, 3000)),
+        ]);
+      } catch {
+        // Ignore cleanup timeouts on WebKit long-polling channels
+      }
+    }),
+  );
+}
+
 test.beforeEach(async () => {
   await clearEmulators();
 });
@@ -63,7 +81,9 @@ test("account entry: email sign-up, verification, password reset, Google sign-in
 }) => {
   // First visit while signed out opens standalone Login / Sign-up screen without workspace shell
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Sign in to Tuntas" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Sign in to Tuntas" }),
+  ).toBeVisible({ timeout: 15000 });
   await expect(page.locator(".rail")).toHaveCount(0);
   await expect(page.locator(".bottom-nav")).toHaveCount(0);
   await expect(page.getByText("demo@example.com", { exact: true })).toBeVisible();
@@ -165,7 +185,9 @@ test("account entry: email sign-up, verification, password reset, Google sign-in
   const googlePopup1Promise = context.waitForEvent("page");
   await page.getByRole("button", { name: "Continue with Google" }).click();
   const gPopup1 = await googlePopup1Promise;
+  await gPopup1.waitForLoadState("domcontentloaded");
   await gPopup1.getByRole("button", { name: "Add new account" }).click();
+  await expect(gPopup1.getByLabel(/Email/i)).toBeVisible();
   await gPopup1.getByLabel(/Email/i).fill("guser@example.com");
   await gPopup1.getByRole("button", { name: /Sign in with Google/i }).click();
 
@@ -438,7 +460,111 @@ test("opt-in local import (retry-safe), two-profile progress sync, device-only o
     await pageA.goto("/#/library");
     await expect(pageA.getByText("0 documents", { exact: true })).toBeVisible();
   } finally {
-    await profileA.close();
-    await profileB.close();
+    await closeContexts(profileA, profileB);
+  }
+});
+
+test("multi-user Split Bill Phase 2: organizer invites participant, participant accepts & submits proof (with Google Pay Sandbox visible), organizer confirms & auto-completes Action, WCAG AA", async ({
+  browser,
+}) => {
+  test.setTimeout(90000);
+  await createSeededUser({ email: "alice@example.com", password: "Password123!" });
+  await createSeededUser({ email: "bob@example.com", password: "Password123!" });
+
+  const profileA = await browser.newContext({
+    viewport: { width: 1280, height: 850 },
+  });
+  const profileB = await browser.newContext({
+    viewport: { width: 1280, height: 850 },
+  });
+  const pageA = await profileA.newPage();
+  const pageB = await profileB.newPage();
+
+  try {
+    // 1. Alice signs in, captures a restaurant receipt, and creates a shared Split Bill inviting Bob
+    await pageA.goto("/");
+    await pageA.getByLabel("Email address").fill("alice@example.com");
+    await pageA.getByLabel(/Password/).fill("Password123!");
+    await pageA.locator("form button[type='submit']").click();
+    await expect(pageA.getByRole("heading", { name: "Life, sorted." })).toBeVisible();
+
+    await pageA.goto("/#/capture");
+    await pageA.getByRole("button", { name: "Paste text" }).click();
+    await pageA
+      .getByLabel("Document text")
+      .fill("Bistro Dinner Receipt\nMain dish\nTotal: USD 60.00\nPayment received.");
+    await pageA.getByRole("button", { name: "Save & organize" }).click();
+    await expect(
+      pageA.getByRole("heading", { name: "Bistro Dinner Receipt" }),
+    ).toBeVisible();
+
+    await pageA.getByRole("button", { name: "Split bill" }).click();
+    const builder = pageA.getByRole("region", { name: "Create split bill" });
+    await expect(builder.getByLabel("Currency")).toHaveValue("USD");
+    await builder.getByLabel("Participant name").nth(1).fill("Bob");
+    await builder.getByLabel(/Google email/).nth(1).fill("bob@example.com");
+    await builder
+      .getByLabel(/Payment instructions/)
+      .fill("BCA 888000 / QRIS");
+    await builder.getByRole("button", { name: "Create split bill" }).click();
+
+    await expect(builder.getByText("Shared in Tuntas")).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(
+      builder.getByText(/Automated email dispatch via Cloud Functions is planned/),
+    ).toBeVisible();
+    await builder.getByRole("link", { name: "Open shared split" }).click();
+    await expect(pageA).toHaveURL(/#\/split\/.+/);
+    const splitUrl = pageA.url();
+    await expect(pageA.getByRole("article").getByText("Pending")).toBeVisible();
+
+    // 2. Bob signs in, sees incoming split on Actions, opens it, checks WCAG AA, accepts & submits proof
+    await pageB.goto("/");
+    await pageB.getByLabel("Email address").fill("bob@example.com");
+    await pageB.getByLabel(/Password/).fill("Password123!");
+    await pageB.locator("form button[type='submit']").click();
+    await expect(pageB.getByRole("heading", { name: "Life, sorted." })).toBeVisible();
+
+    await pageB.goto("/#/actions");
+    const sharedSection = pageB.getByRole("region", { name: "Shared split bills" });
+    await expect(sharedSection).toBeVisible({ timeout: 15000 });
+    await sharedSection.getByRole("link", { name: /Bistro Dinner Receipt/ }).click();
+    await expect(pageB).toHaveURL(splitUrl);
+    await expect(pageB.getByText("$30.00")).toBeVisible();
+
+    const splitAxe = await new AxeBuilder({ page: pageB })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(splitAxe.violations).toEqual([]);
+
+    await pageB.getByRole("button", { name: "Accept share" }).click();
+    await expect(
+      pageB.getByRole("button", { name: "Pay with Google Pay (Sandbox Demo)" }),
+    ).toBeVisible();
+
+    await pageB
+      .getByLabel(/Transfer reference/)
+      .fill("Transfer USD 30.00 Ref TRX-9021");
+    await pageB.getByRole("button", { name: "Verify proof" }).click();
+    await expect(pageB.getByText(/Amount matched locally/)).toBeVisible();
+    await pageB.getByRole("button", { name: "Submit payment proof" }).click();
+    await expect(pageB.getByText("Proof submitted")).toBeVisible();
+
+    // 3. Alice confirms payment received -> status turns Confirmed & local Action auto-completes
+    await pageA.reload();
+    await expect(pageA.getByText("Proof submitted")).toBeVisible({ timeout: 15000 });
+    await expect(pageA.getByText(/Amount matched locally/)).toBeVisible();
+    await pageA.getByRole("button", { name: "Confirm payment received" }).click();
+    await expect(pageA.getByText("Confirmed").first()).toBeVisible({ timeout: 15000 });
+
+    await pageA.goto("/#/actions");
+    const groupA = pageA.getByRole("region", { name: "Bistro Dinner Receipt" });
+    await expect(groupA.getByText("1 of 2 steps completed")).toBeVisible();
+    await expect(
+      groupA.locator(".action-card").nth(1).locator(".readiness-chip"),
+    ).toHaveText("Ready");
+  } finally {
+    await closeContexts(profileA, profileB);
   }
 });

@@ -325,3 +325,107 @@ test("enforces permanent tombstones on documents/actions/groups and timestamp ch
     ),
   );
 });
+
+function validSplit(id = "sp-1", overrides = {}) {
+  return {
+    id,
+    organizerUid: "alice",
+    organizerEmail: "alice@example.com",
+    title: "Dinner receipt",
+    currency: "USD",
+    totalAmount: 60,
+    splitMode: "equal",
+    itemsSummary: "",
+    paymentInstructions: "BCA 123456",
+    participantEmails: ["bob@example.com"],
+    status: "open",
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+function validShare(id = "sh-bob", splitId = "sp-1", overrides = {}) {
+  return {
+    id,
+    splitId,
+    organizerUid: "alice",
+    participantName: "Bob",
+    participantEmail: "bob@example.com",
+    participantUid: "",
+    amount: 30,
+    note: "",
+    status: "pending",
+    paymentMethod: "",
+    proofSummary: "",
+    proofVerifiedByAi: false,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+test("splits & shares rules allow organizer + invited participant, block self-confirm, third-parties, and deletes", async () => {
+  const anonDb = testEnv.unauthenticatedContext().firestore();
+  const aliceDb = testEnv.authenticatedContext("alice", { email: "alice@example.com" }).firestore();
+  const bobDb = testEnv.authenticatedContext("bob", { email: "bob@example.com" }).firestore();
+  const charlieDb = testEnv.authenticatedContext("charlie", { email: "charlie@example.com" }).firestore();
+
+  // Organizer creates split and share
+  await assertSucceeds(setDoc(doc(aliceDb, "splits", "sp-1"), validSplit("sp-1")));
+  await assertSucceeds(setDoc(doc(aliceDb, "splits", "sp-1", "shares", "sh-bob"), validShare("sh-bob", "sp-1")));
+
+  // Unauthenticated & unrelated third party denied
+  await assertFails(getDoc(doc(anonDb, "splits", "sp-1")));
+  await assertFails(getDoc(doc(charlieDb, "splits", "sp-1")));
+  await assertFails(getDoc(doc(charlieDb, "splits", "sp-1", "shares", "sh-bob")));
+
+  // Invited participant Bob can read split & own share, accept & submit proof
+  await assertSucceeds(getDoc(doc(bobDb, "splits", "sp-1")));
+  await assertSucceeds(getDoc(doc(bobDb, "splits", "sp-1", "shares", "sh-bob")));
+  await assertSucceeds(
+    updateDoc(doc(bobDb, "splits", "sp-1", "shares", "sh-bob"), {
+      status: "accepted",
+      participantUid: "bob",
+      updatedAt: 2000,
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(bobDb, "splits", "sp-1", "shares", "sh-bob"), {
+      status: "paid_pending_confirm",
+      paymentMethod: "qris_bank_ewallet",
+      proofSummary: "Transfer USD 30.00 Ref TRX-1",
+      proofVerifiedByAi: false,
+      updatedAt: 2500,
+    }),
+  );
+
+  // Participant cannot self-confirm or alter amount
+  await assertFails(
+    updateDoc(doc(bobDb, "splits", "sp-1", "shares", "sh-bob"), {
+      status: "confirmed",
+      updatedAt: 3000,
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(bobDb, "splits", "sp-1", "shares", "sh-bob"), {
+      amount: 1,
+      updatedAt: 3000,
+    }),
+  );
+
+  // Organizer can confirm payment received & settle split; hard deletes denied
+  await assertSucceeds(
+    updateDoc(doc(aliceDb, "splits", "sp-1", "shares", "sh-bob"), {
+      status: "confirmed",
+      updatedAt: 3500,
+    }),
+  );
+  await assertSucceeds(
+    updateDoc(doc(aliceDb, "splits", "sp-1"), {
+      status: "settled",
+      updatedAt: 3500,
+    }),
+  );
+  await assertFails(deleteDoc(doc(aliceDb, "splits", "sp-1")));
+  await assertFails(deleteDoc(doc(aliceDb, "splits", "sp-1", "shares", "sh-bob")));
+});

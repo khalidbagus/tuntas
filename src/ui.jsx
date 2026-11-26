@@ -41,6 +41,7 @@ import {
   toLocalIsoDate,
 } from "./actions-domain.js";
 import { useLang } from "./lang.js";
+import { AskPaperworkPanel } from "./ask-library.jsx";
 import {
   createTranslator,
   formatDate,
@@ -549,6 +550,8 @@ export function Home({
 
 export function Library({
   docs,
+  actions = [],
+  online = true,
   query,
   setQuery,
   category,
@@ -633,6 +636,14 @@ export function Library({
           );
         })}
       </div>
+
+      {organizedDocs.length > 0 && (
+        <AskPaperworkPanel
+          docs={organizedDocs}
+          actions={actions}
+          online={online}
+        />
+      )}
 
       <div className="section-top">
         <h2>

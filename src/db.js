@@ -5,6 +5,7 @@ import {
   isValidIsoDate,
   validateDependency,
 } from "./actions-domain.js";
+import { formatSplitAmount } from "./split-domain.js";
 import { tombstoneKey } from "./sync-domain.js";
 import {
   PERSONAL_DB_NAME,
@@ -1233,4 +1234,136 @@ export async function applyWorkflowTemplate(documentId, template) {
     actionCount: createdActions.length,
     dependencyCount,
   };
+}
+
+export async function createSplitActionWorkflow(
+  documentId,
+  { groupTitle, currency = "USD", locale = "en-US", shares = [], splitId = "" },
+) {
+  const cleanTitle = String(groupTitle ?? "").trim().slice(0, 80);
+  if (!cleanTitle) throw Error("Give your group a short name.");
+  const nonSelf = (shares || []).filter((s) => !s.isSelf);
+  if (!nonSelf.length) throw Error("Add at least one other participant.");
+
+  const database = await getDB();
+  const tx = database.transaction(
+    ["documents", "actionGroups", "actions", "actionDependencies"],
+    "readwrite",
+  );
+  const docsStore = tx.objectStore("documents");
+  const groupsStore = tx.objectStore("actionGroups");
+  const actionsStore = tx.objectStore("actions");
+  const depsStore = tx.objectStore("actionDependencies");
+
+  const doc = await docsStore.get(documentId);
+  if (!doc) {
+    await tx.done;
+    throw Error("Document not found.");
+  }
+
+  const now = Date.now();
+  const group = {
+    id: crypto.randomUUID(),
+    title: cleanTitle,
+    created: now,
+    updated: now,
+    updatedAt: now,
+    _dirty: true,
+  };
+  await groupsStore.add(group);
+
+  const collectActions = [];
+  for (let idx = 0; idx < nonSelf.length; idx += 1) {
+    const share = nonSelf[idx];
+    const formatted = formatSplitAmount(share.amount, currency, locale);
+    const title = `Collect ${formatted} from ${String(share.name || "Friend").trim()}`.slice(
+      0,
+      140,
+    );
+    const quoteParts = [
+      share.email ? `Email: ${share.email}` : "",
+      share.note ? share.note : "",
+    ].filter(Boolean);
+    const stepTs = now + idx;
+    const act = {
+      id: crypto.randomUUID(),
+      documentId,
+      title,
+      due: "",
+      done: false,
+      created: stepTs,
+      updatedAt: stepTs,
+      _dirty: true,
+      groupId: group.id,
+      ...(splitId ? { splitId } : {}),
+      ...(share.id ? { splitShareId: share.id } : {}),
+      ...(quoteParts.length ? { quote: quoteParts.join(" · ").slice(0, 320) } : {}),
+    };
+    await actionsStore.add(act);
+    collectActions.push(act);
+  }
+
+  const finalTs = now + nonSelf.length;
+  const finalAction = {
+    id: crypto.randomUUID(),
+    documentId,
+    title: "All split shares settled",
+    due: "",
+    done: false,
+    created: finalTs,
+    updatedAt: finalTs,
+    _dirty: true,
+    groupId: group.id,
+    ...(splitId ? { splitId } : {}),
+  };
+  await actionsStore.add(finalAction);
+
+  for (const act of collectActions) {
+    await depsStore.add({
+      id: dependencyId(act.id, finalAction.id),
+      prerequisiteActionId: act.id,
+      dependentActionId: finalAction.id,
+      created: now,
+      updatedAt: now,
+      _dirty: true,
+    });
+  }
+
+  if (splitId) {
+    await docsStore.put({
+      ...doc,
+      splitId,
+      updatedAt: now,
+      _dirty: true,
+    });
+  }
+
+  await tx.done;
+  return {
+    groupId: group.id,
+    actionCount: collectActions.length + 1,
+    finalActionId: finalAction.id,
+  };
+}
+
+export async function markSplitShareActionDone(splitId, shareId) {
+  if (!splitId || !shareId) return false;
+  const database = await getDB();
+  const tx = database.transaction("actions", "readwrite");
+  const all = await tx.store.getAll();
+  const target = all.find(
+    (a) => a.splitId === splitId && a.splitShareId === shareId,
+  );
+  let updated = false;
+  if (target && !target.done) {
+    await tx.store.put({
+      ...target,
+      done: true,
+      updatedAt: Date.now(),
+      _dirty: true,
+    });
+    updated = true;
+  }
+  await tx.done;
+  return updated;
 }

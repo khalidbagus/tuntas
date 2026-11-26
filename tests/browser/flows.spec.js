@@ -1707,3 +1707,66 @@ test("Milestone 1 & 2: standalone #/login demo entry, Hybrid AI privacy indicato
     .analyze();
   expect(actionsAxe.violations).toEqual([]);
 });
+
+test("Milestones 3 & 4: Split Bill Phase 1 on IDR receipt and Ask Your Paperwork in Library with WCAG AA", async ({
+  page,
+}) => {
+  // 1. Split Bill Phase 1 on demo Indonesian restaurant receipt (184.000 IDR)
+  await page.goto("/?demo=1#/document/demo-doc-redacted-receipt-1");
+  await page.getByRole("button", { name: "Split bill" }).click();
+  const splitPanel = page.getByRole("region", { name: "Create split bill" });
+  await expect(splitPanel).toBeVisible();
+  await expect(splitPanel.getByLabel("Currency")).toHaveValue("IDR");
+  await expect(splitPanel.getByLabel("Currency").locator("option")).toHaveCount(5);
+
+  const nameInputs = splitPanel.getByLabel("Participant name");
+  await nameInputs.nth(1).fill("Budi");
+  await splitPanel.getByRole("button", { name: "Add person" }).click();
+  await nameInputs.nth(2).fill("Siti");
+  await splitPanel
+    .getByLabel(/Payment instructions/)
+    .fill("BCA 1234567890 / QRIS");
+  await splitPanel.getByRole("button", { name: "Create split bill" }).click();
+
+  await expect(splitPanel.getByText("Split bill ready")).toBeVisible();
+  await expect(splitPanel.getByText("Saved in Actions")).toBeVisible();
+
+  await splitPanel.getByRole("link", { name: "Open in Actions" }).click();
+  const splitGroup = page.getByRole("region", { name: "Restaurant dinner receipt" });
+  await expect(splitGroup).toBeVisible();
+  await expect(splitGroup.getByText("0 of 3 steps completed")).toBeVisible();
+  await expect(splitGroup.getByText("All split shares settled")).toBeVisible();
+  await expect(splitGroup.getByText("Waiting on 2 steps")).toBeVisible();
+
+  // 2. Ask Your Paperwork in Library (spending total + factual renewal with clickable citation)
+  await page.goto("/?demo=1#/library");
+  const askSection = page.getByRole("region", { name: "Ask your paperwork" });
+  await expect(askSection).toBeVisible();
+
+  await askSection.getByRole("button", { name: "How much did I spend on receipts?" }).click();
+  const answerRegion = askSection.getByRole("region", { name: "Paperwork answer" });
+  await expect(answerRegion).toBeVisible();
+  await expect(answerRegion).toContainText("432,142");
+  await expect(
+    answerRegion.getByRole("link", { name: /Restaurant dinner receipt/ }),
+  ).toBeVisible();
+
+  // Check WCAG AA + 360px mobile overflow with Ask Your Paperwork open
+  const libraryAxe = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(libraryAxe.violations).toEqual([]);
+
+  await page.setViewportSize({ width: 360, height: 800 });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 850 });
+
+  await askSection.getByRole("button", { name: "When does household membership renew?" }).click();
+  await expect(answerRegion).toContainText("2026-12-12");
+  await answerRegion
+    .getByRole("link", { name: /Household membership renewal notice/ })
+    .click();
+  await expect(page).toHaveURL(/\?demo=1#\/document\/demo-doc-renewal$/);
+});

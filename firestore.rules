@@ -68,6 +68,40 @@ rules_version = '2';
 //   - deleted: bool (required; re-link allowed only when next.updatedAt > existing.updatedAt)
 //   - deletedAt: null | int | float >= 0 (required)
 //
+// Collection: splits/{splitId}
+// Document ID: split id (matches data.id)
+// Fields:
+//   - id: string (required, immutable == splitId)
+//   - organizerUid: string (required, 1..128 chars, == auth.uid on create, immutable)
+//   - organizerEmail: string (required, max 120 chars, immutable)
+//   - title: string (required, 1..120 chars)
+//   - currency: string enum (required: IDR | USD | SGD | EUR | GBP)
+//   - totalAmount: int | float > 0 (required)
+//   - splitMode: string enum (required: equal | itemized)
+//   - itemsSummary: string (required, max 1000 chars)
+//   - paymentInstructions: string (required, max 500 chars)
+//   - participantEmails: list<string> (required, max 12 items, each string max 120 chars)
+//   - status: string enum (required: open | settled | canceled)
+//   - createdAt: int | float >= 0 (required, immutable)
+//   - updatedAt: int | float >= 0 (required)
+//
+// Collection: splits/{splitId}/shares/{shareId}
+// Document ID: share id (matches data.id)
+// Fields:
+//   - id: string (required, immutable == shareId)
+//   - splitId: string (required, immutable == splitId)
+//   - organizerUid: string (required, 1..128 chars, immutable; == auth.uid and parent split organizerUid on create)
+//   - participantName: string (required, 1..80 chars)
+//   - participantEmail: string (required, max 120 chars, immutable)
+//   - participantUid: string (required, max 128 chars)
+//   - amount: int | float >= 0 (required)
+//   - note: string (required, max 240 chars)
+//   - status: string enum (required: pending | accepted | declined | paid_pending_confirm | confirmed)
+//   - paymentMethod: string enum (required: '' | qris_bank_ewallet | google_pay_sandbox)
+//   - proofSummary: string (required, max 400 chars)
+//   - proofVerifiedByAi: bool (required)
+//   - updatedAt: int | float >= 0 (required)
+//
 // ===============================================================
 
 service cloud.firestore {
@@ -135,6 +169,35 @@ service cloud.firestore {
       return existing.deleted == false ||
         next.deleted == true ||
         (next.deleted == false && next.updatedAt > existing.updatedAt);
+    }
+
+    // Deep-validate bounded participant email strings inside a list of at most 12 items.
+    function isValidParticipantEmail(email) {
+      return email is string && email.size() <= 120;
+    }
+
+    function isValidParticipantEmailList(emails) {
+      return emails is list &&
+        emails.size() <= 12 &&
+        (emails.size() < 1 || isValidParticipantEmail(emails[0])) &&
+        (emails.size() < 2 || isValidParticipantEmail(emails[1])) &&
+        (emails.size() < 3 || isValidParticipantEmail(emails[2])) &&
+        (emails.size() < 4 || isValidParticipantEmail(emails[3])) &&
+        (emails.size() < 5 || isValidParticipantEmail(emails[4])) &&
+        (emails.size() < 6 || isValidParticipantEmail(emails[5])) &&
+        (emails.size() < 7 || isValidParticipantEmail(emails[6])) &&
+        (emails.size() < 8 || isValidParticipantEmail(emails[7])) &&
+        (emails.size() < 9 || isValidParticipantEmail(emails[8])) &&
+        (emails.size() < 10 || isValidParticipantEmail(emails[9])) &&
+        (emails.size() < 11 || isValidParticipantEmail(emails[10])) &&
+        (emails.size() < 12 || isValidParticipantEmail(emails[11]));
+    }
+
+    function hasCallerEmail() {
+      return 'email' in request.auth.token &&
+        request.auth.token.email != null &&
+        request.auth.token.email is string &&
+        request.auth.token.email.size() > 0;
     }
 
     // ===============================================================
@@ -303,6 +366,128 @@ service cloud.firestore {
         isNullableTimestampMs(data.deletedAt);
     }
 
+    function isValidSplit(data, splitId) {
+      return hasOnlyAllowedFields(data, [
+          'id',
+          'organizerUid',
+          'organizerEmail',
+          'title',
+          'currency',
+          'totalAmount',
+          'splitMode',
+          'itemsSummary',
+          'paymentInstructions',
+          'participantEmails',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        hasRequiredFields(data, [
+          'id',
+          'organizerUid',
+          'organizerEmail',
+          'title',
+          'currency',
+          'totalAmount',
+          'splitMode',
+          'itemsSummary',
+          'paymentInstructions',
+          'participantEmails',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.id is string &&
+        data.id == splitId &&
+        data.organizerUid is string &&
+        data.organizerUid.size() > 0 &&
+        data.organizerUid.size() <= 128 &&
+        data.organizerEmail is string &&
+        data.organizerEmail.size() <= 120 &&
+        data.title is string &&
+        data.title.size() > 0 &&
+        data.title.size() <= 120 &&
+        data.currency in ['IDR', 'USD', 'SGD', 'EUR', 'GBP'] &&
+        (data.totalAmount is int || data.totalAmount is float) &&
+        data.totalAmount > 0 &&
+        data.splitMode in ['equal', 'itemized'] &&
+        data.itemsSummary is string &&
+        data.itemsSummary.size() <= 1000 &&
+        data.paymentInstructions is string &&
+        data.paymentInstructions.size() <= 500 &&
+        isValidParticipantEmailList(data.participantEmails) &&
+        data.status in ['open', 'settled', 'canceled'] &&
+        isValidTimestampMs(data.createdAt) &&
+        isValidTimestampMs(data.updatedAt);
+    }
+
+    function isValidSplitShare(data, splitId, shareId) {
+      return hasOnlyAllowedFields(data, [
+          'id',
+          'splitId',
+          'organizerUid',
+          'participantName',
+          'participantEmail',
+          'participantUid',
+          'amount',
+          'note',
+          'status',
+          'paymentMethod',
+          'proofSummary',
+          'proofVerifiedByAi',
+          'updatedAt'
+        ]) &&
+        hasRequiredFields(data, [
+          'id',
+          'splitId',
+          'organizerUid',
+          'participantName',
+          'participantEmail',
+          'participantUid',
+          'amount',
+          'note',
+          'status',
+          'paymentMethod',
+          'proofSummary',
+          'proofVerifiedByAi',
+          'updatedAt'
+        ]) &&
+        data.id is string &&
+        data.id == shareId &&
+        data.splitId is string &&
+        data.splitId == splitId &&
+        data.organizerUid is string &&
+        data.organizerUid.size() > 0 &&
+        data.organizerUid.size() <= 128 &&
+        data.participantName is string &&
+        data.participantName.size() > 0 &&
+        data.participantName.size() <= 80 &&
+        data.participantEmail is string &&
+        data.participantEmail.size() <= 120 &&
+        data.participantUid is string &&
+        data.participantUid.size() <= 128 &&
+        (data.amount is int || data.amount is float) &&
+        data.amount >= 0 &&
+        data.note is string &&
+        data.note.size() <= 240 &&
+        data.status in [
+          'pending',
+          'accepted',
+          'declined',
+          'paid_pending_confirm',
+          'confirmed'
+        ] &&
+        data.paymentMethod in [
+          '',
+          'qris_bank_ewallet',
+          'google_pay_sandbox'
+        ] &&
+        data.proofSummary is string &&
+        data.proofSummary.size() <= 400 &&
+        data.proofVerifiedByAi is bool &&
+        isValidTimestampMs(data.updatedAt);
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -355,6 +540,59 @@ service cloud.firestore {
       allow update: if isOwner(uid) &&
         isValidActionDependency(request.resource.data, depId) &&
         canUpdateDependency(resource.data, request.resource.data);
+      allow delete: if false;
+    }
+
+    match /splits/{splitId} {
+      allow read: if isAuthenticated() && (
+        resource.data.organizerUid == request.auth.uid ||
+        (hasCallerEmail() &&
+          request.auth.token.email.lower() in resource.data.participantEmails)
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.organizerUid == request.auth.uid &&
+        isValidSplit(request.resource.data, splitId);
+      allow update: if isAuthenticated() &&
+        resource.data.organizerUid == request.auth.uid &&
+        isValidSplit(request.resource.data, splitId) &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.organizerUid == resource.data.organizerUid &&
+        request.resource.data.organizerEmail == resource.data.organizerEmail &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    match /splits/{splitId}/shares/{shareId} {
+      allow read: if isAuthenticated() && (
+        resource.data.organizerUid == request.auth.uid ||
+        (hasCallerEmail() &&
+          request.auth.token.email.lower() == resource.data.participantEmail)
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.organizerUid == request.auth.uid &&
+        exists(/databases/$(database)/documents/splits/$(splitId)) &&
+        get(/databases/$(database)/documents/splits/$(splitId)).data.organizerUid == request.auth.uid &&
+        isValidSplitShare(request.resource.data, splitId, shareId);
+      allow update: if isValidSplitShare(request.resource.data, splitId, shareId) &&
+        isAuthenticated() && (
+          (resource.data.organizerUid == request.auth.uid &&
+            request.resource.data.id == resource.data.id &&
+            request.resource.data.splitId == resource.data.splitId &&
+            request.resource.data.organizerUid == resource.data.organizerUid &&
+            request.resource.data.participantEmail == resource.data.participantEmail) ||
+          (hasCallerEmail() &&
+            request.auth.token.email.lower() == resource.data.participantEmail &&
+            request.resource.data.id == resource.data.id &&
+            request.resource.data.splitId == resource.data.splitId &&
+            request.resource.data.organizerUid == resource.data.organizerUid &&
+            request.resource.data.participantName == resource.data.participantName &&
+            request.resource.data.participantEmail == resource.data.participantEmail &&
+            request.resource.data.amount == resource.data.amount &&
+            request.resource.data.note == resource.data.note &&
+            request.resource.data.status in ['accepted', 'declined', 'paid_pending_confirm'] &&
+            (request.resource.data.participantUid == '' ||
+              request.resource.data.participantUid == request.auth.uid))
+        );
       allow delete: if false;
     }
 
