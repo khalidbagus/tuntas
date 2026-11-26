@@ -61,8 +61,21 @@ test("account entry: email sign-up, verification, password reset, Google sign-in
   page,
   context,
 }) => {
+  // First visit while signed out opens standalone Login / Sign-up screen without workspace shell
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Sign in to Tuntas" })).toBeVisible();
+  await expect(page.locator(".rail")).toHaveCount(0);
+  await expect(page.locator(".bottom-nav")).toHaveCount(0);
+  await expect(page.getByText("demo@example.com", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Enter demo" }).click();
+  await expect(page).toHaveURL(/\?demo=1&from=%2Flogin#\/home$/);
+  await expect(page.locator(".demo-bar")).toContainText("demo@example.com");
+  await page.getByRole("link", { name: "Exit demo" }).first().click();
+  await expect(page).toHaveURL(/\/#\/login$/);
+
   await page.goto("/#/account");
-  await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in to Tuntas" })).toBeVisible();
 
   // Desktop accessibility + overflow check
   const desktopAxe = await new AxeBuilder({ page })
@@ -90,7 +103,7 @@ test("account entry: email sign-up, verification, password reset, Google sign-in
   const closedPopupPromise = context.waitForEvent("page");
   await page.getByRole("button", { name: "Continue with Google" }).click();
   const closedPopup = await closedPopupPromise;
-  await closedPopup.waitForLoadState("domcontentloaded").catch(() => {});
+  await closedPopup.waitForLoadState("domcontentloaded").catch(() => { });
   await closedPopup.close();
   await expect(page.getByRole("alert")).toContainText(
     "canceled before finishing",
@@ -171,7 +184,7 @@ test("account entry: email sign-up, verification, password reset, Google sign-in
 
   // Demo isolation & return route + Mobile 390px + ID check
   await page.getByRole("button", { name: "Sign out" }).click();
-  await page.getByRole("link", { name: "Explore demo" }).click();
+  await page.getByRole("link", { name: "Enter demo" }).click();
   await expect(page).toHaveURL(/\?demo=1.*#\/home$/);
   await page.goto("/?demo=1&from=%2Faccount#/account");
   await expect(
@@ -182,7 +195,7 @@ test("account entry: email sign-up, verification, password reset, Google sign-in
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByLabel("Language").selectOption("id");
-  await expect(page.getByRole("heading", { name: "Akun" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Masuk ke Tuntas" })).toBeVisible();
   const mobileAxe = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
@@ -213,7 +226,7 @@ test("opt-in local import (retry-safe), two-profile progress sync, device-only o
   try {
     // 1. Local-only use on Profile A while signed out
     await pageA.goto("/#/account");
-    await pageA.getByRole("link", { name: "Continue on this device" }).click();
+    await pageA.getByRole("button", { name: "Continue on this device" }).click();
     await pageA.goto("/#/capture");
     await pageA.getByRole("button", { name: "Paste text" }).click();
     await pageA
@@ -411,7 +424,7 @@ test("opt-in local import (retry-safe), two-profile progress sync, device-only o
     // 7. Sign out Alice on Profile A -> local-only copy is preserved -> switch to Bob -> strict UID isolation
     await pageA.goto("/#/account");
     await pageA.getByRole("button", { name: "Sign out" }).click();
-    await pageA.getByRole("link", { name: "Continue on this device" }).click();
+    await pageA.getByRole("button", { name: "Continue on this device" }).click();
     await pageA.goto("/#/library");
     await expect(pageA.getByText("1 document", { exact: true })).toBeVisible();
     await expect(pageA.getByRole("link", { name: /City power bill/ })).toBeVisible();

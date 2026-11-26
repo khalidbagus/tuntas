@@ -33,6 +33,7 @@ import {
 } from "./ui.jsx";
 import { Actions } from "./actions-view.jsx";
 import { AccountPage } from "./account-view.jsx";
+import { AuthEntryScreen } from "./auth-entry.jsx";
 import { Capture, Detail } from "./forms.jsx";
 import {
   snapshot,
@@ -46,6 +47,7 @@ import {
   deleteGroup,
   addDependency,
   removeDependency,
+  applyWorkflowTemplate,
   ensureDemoSeeded,
   setActiveWorkspaceUid,
   getSyncMeta,
@@ -57,7 +59,12 @@ import {
   msUntilNextLocalMidnight,
   toLocalIsoDate,
 } from "./actions-domain.js";
-import { isDemoMode, exitDemoHref, LOCAL_RECEIPT_SOURCE } from "./demo.js";
+import {
+  DEMO_ACCOUNT_EMAIL,
+  isDemoMode,
+  exitDemoHref,
+  LOCAL_RECEIPT_SOURCE,
+} from "./demo.js";
 import { firebaseAuthConfigured } from "./firebase-settings.js";
 import {
   observeAuth,
@@ -124,8 +131,28 @@ const snapshotUser = (u) =>
         providerData: Array.isArray(u.providerData) ? [...u.providerData] : [],
       }
     : null;
+const LOCAL_GUEST_STORAGE_KEY = "tuntas-local-guest-v1";
+const loadLocalGuestMode = () => {
+  try {
+    return globalThis.localStorage?.getItem?.(LOCAL_GUEST_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+const saveLocalGuestMode = (enabled) => {
+  try {
+    if (enabled) {
+      globalThis.localStorage?.setItem?.(LOCAL_GUEST_STORAGE_KEY, "1");
+    } else {
+      globalThis.localStorage?.removeItem?.(LOCAL_GUEST_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors in restricted contexts.
+  }
+};
 const readRoute = () => location.hash.slice(1) || "/home";
 function App() {
+  const demoMode = isDemoMode();
   const [lang, setLang] = useState(() => loadLang());
   const t = createTranslator(lang);
   const [route, setRoute] = useState(readRoute),
@@ -141,13 +168,16 @@ function App() {
     [notice, setNotice] = useState(null),
     [busy, setBusy] = useState(""),
     [user, setUser] = useState(null),
+    [authChecked, setAuthChecked] = useState(
+      () => demoMode || !firebaseAuthConfigured,
+    ),
+    [localGuestMode, setLocalGuestMode] = useState(() => loadLocalGuestMode()),
     [syncMeta, setSyncMeta] = useState(defaultSyncMeta),
     [remoteSyncDetected, setRemoteSyncDetected] = useState(false),
     [localSummary, setLocalSummary] = useState(defaultLocalSummary),
     running = useRef(false),
     userRef = useRef(null),
     syncUnsubRef = useRef(null);
-  const demoMode = isDemoMode();
   const hasLocalReceipts = demoMode && data.docs.some(
     (doc) => doc.source === LOCAL_RECEIPT_SOURCE,
   );
@@ -167,6 +197,14 @@ function App() {
     quickFile = useRef(null),
     quickCamera = useRef(null);
   const [page, id] = route.replace(/^\//, "").split("/"),
+    showAuthLoading = !demoMode && firebaseAuthConfigured && !authChecked,
+    showStandaloneAuth =
+      !demoMode &&
+      !user &&
+      ((firebaseAuthConfigured &&
+        authChecked &&
+        (!localGuestMode || page === "login" || page === "account")) ||
+        (!firebaseAuthConfigured && page === "login")),
     activeItem = items.find(([p]) => p === page),
     active = activeItem
       ? t(activeItem[1])
@@ -175,6 +213,7 @@ function App() {
             capture: "pageCapture",
             document: "pageDocument",
             account: "pageAccount",
+            login: "authTabSignIn",
           }[page] || "pageFallback",
         );
   const doc = data.docs.find((d) => d.id === id);
@@ -248,9 +287,16 @@ function App() {
       setRemoteSyncDetected(false);
 
       if (!alive) return;
+      if (!demoMode && nextUser) {
+        saveLocalGuestMode(false);
+        setLocalGuestMode(false);
+        const currentPage = readRoute().replace(/^\//, "").split("/")[0];
+        if (currentPage === "login") navTo("/home");
+      }
       if (demoMode) await ensureDemoSeeded();
       await refresh(nextUid);
       if (!alive) return;
+      setAuthChecked(true);
 
       if (!demoMode && nextUid) {
         const currentMeta = await getSyncMeta(nextUid);
@@ -276,6 +322,7 @@ function App() {
     if (demoMode || !firebaseAuthConfigured) {
       activateUid(null).catch(() => {
         if (!alive) return;
+        setAuthChecked(true);
         setLoadFailed(true);
         say(
           "Browser storage is unavailable. Allow site storage and reload.",
@@ -287,6 +334,7 @@ function App() {
         if (!alive) return;
         activateUid(nextUser).catch(() => {
           if (!alive) return;
+          setAuthChecked(true);
           setLoadFailed(true);
           say(
             "Browser storage is unavailable. Allow site storage and reload.",
@@ -374,20 +422,22 @@ function App() {
         );
   }, [page]);
   useEffect(() => {
-    if (!loaded) return;
+    if (showAuthLoading) return;
+    if (!loaded && !showStandaloneAuth) return;
     document.title =
-      active +
+      (showStandaloneAuth ? t("authEntryTitle") : active) +
       (demoMode
         ? ` · ${t("sampleWorkspace")} · ${t("appTitleSuffix")}`
         : ` · ${t("appTitleSuffix")}`);
-  }, [loaded, demoMode, active, lang]);
+  }, [loaded, showAuthLoading, showStandaloneAuth, demoMode, active, lang]);
   useEffect(() => {
-    if (!loaded) return;
-    if (searchFocus.current && page === "library") {
+    if (showAuthLoading) return;
+    if (!loaded && !showStandaloneAuth) return;
+    if (searchFocus.current && page === "library" && !showStandaloneAuth) {
       inputRef.current?.focus();
       searchFocus.current = false;
     } else document.querySelector("h1")?.focus({ preventScroll: true });
-  }, [route, loaded]);
+  }, [route, loaded, showAuthLoading, showStandaloneAuth]);
   const goSearch = () => {
     if (readRoute() === "/library") inputRef.current?.focus();
     else {
@@ -515,6 +565,69 @@ function App() {
       <Plus size={18} aria-hidden="true" /> {t("navCapture")}
     </a>
   );
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, errorKey: mapAuthError(e) };
+    }
+  };
+  const handleEmailSignIn = async (em, pw) => {
+    try {
+      await signInEmail(em, pw);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, errorKey: mapAuthError(e) };
+    }
+  };
+  const handleEmailSignUp = async (em, pw) => {
+    try {
+      await signUpEmail(em, pw);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, errorKey: mapAuthError(e) };
+    }
+  };
+  const handlePasswordReset = async (em) => {
+    try {
+      await requestPasswordReset(em);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, errorKey: mapAuthError(e) };
+    }
+  };
+  const handleContinueLocal = () => {
+    saveLocalGuestMode(true);
+    setLocalGuestMode(true);
+    navTo("/home");
+  };
+  if (showAuthLoading) {
+    return (
+      <LangContext.Provider value={lang}>
+        <main id="main-content" tabIndex="-1" className="auth-loading">
+          <p>{t("openingWorkspace")}</p>
+        </main>
+      </LangContext.Provider>
+    );
+  }
+  if (showStandaloneAuth) {
+    return (
+      <LangContext.Provider value={lang}>
+        <AuthEntryScreen
+          lang={lang}
+          setLang={setLang}
+          authConfigured={firebaseAuthConfigured}
+          returnRoute={page === "account" ? "/account" : "/login"}
+          onGoogleSignIn={handleGoogleSignIn}
+          onEmailSignIn={handleEmailSignIn}
+          onEmailSignUp={handleEmailSignUp}
+          onPasswordReset={handlePasswordReset}
+          onContinueLocal={handleContinueLocal}
+        />
+      </LangContext.Provider>
+    );
+  }
   return (
     <LangContext.Provider value={lang}>
       <a
@@ -545,7 +658,7 @@ function App() {
               <Monitor size={19} aria-hidden="true" />
             </span>
             <div>
-              <strong>{t("sampleWorkspace")}</strong>
+              <strong>{DEMO_ACCOUNT_EMAIL}</strong>
               <small>{t("sampleDataIsolated")}</small>
             </div>
           </div>
@@ -660,6 +773,7 @@ function App() {
           <section className="demo-bar" aria-label={t("sampleWorkspace")}>
             <div className="demo-bar-copy">
               <span className="demo-badge">{t("sampleWorkspace")}</span>
+              <span className="demo-email-chip">{DEMO_ACCOUNT_EMAIL}</span>
               <span>
                 {hasLocalReceipts
                   ? t("demoBannerLocalReceipts")
@@ -817,6 +931,7 @@ function App() {
                   "Connection removed.",
                 )
               }
+              onExportCalendar={() => say("Calendar reminder downloaded.")}
             />
           ) : page === "document" && doc ? (
             <Detail
@@ -875,6 +990,28 @@ function App() {
                   "Follow-up draft dismissed.",
                 )
               }
+              applyTemplate={async (d, template) => {
+                try {
+                  const res = await applyWorkflowTemplate(d.id, template);
+                  await refresh();
+                  say(
+                    res.created
+                      ? "Workflow template created in Actions."
+                      : "Workflow template already added.",
+                  );
+                  syncAfterWrite().catch(() => {});
+                  return true;
+                } catch {
+                  say("The change could not be saved. Try again.", true);
+                  return false;
+                }
+              }}
+              dismissTemplate={(d) =>
+                mutation(
+                  () => change(d.id, { workflowTemplateDismissed: true }),
+                  "Workflow template dismissed.",
+                )
+              }
             />
           ) : page === "account" ? (
             <AccountPage
@@ -885,38 +1022,11 @@ function App() {
               syncMeta={syncMeta}
               remoteSyncDetected={remoteSyncDetected}
               localSummary={localSummary}
-              onGoogleSignIn={async () => {
-                try {
-                  await signInWithGoogle();
-                  return { ok: true };
-                } catch (e) {
-                  return { ok: false, errorKey: mapAuthError(e) };
-                }
-              }}
-              onEmailSignIn={async (em, pw) => {
-                try {
-                  await signInEmail(em, pw);
-                  return { ok: true };
-                } catch (e) {
-                  return { ok: false, errorKey: mapAuthError(e) };
-                }
-              }}
-              onEmailSignUp={async (em, pw) => {
-                try {
-                  await signUpEmail(em, pw);
-                  return { ok: true };
-                } catch (e) {
-                  return { ok: false, errorKey: mapAuthError(e) };
-                }
-              }}
-              onPasswordReset={async (em) => {
-                try {
-                  await requestPasswordReset(em);
-                  return { ok: true };
-                } catch (e) {
-                  return { ok: false, errorKey: mapAuthError(e) };
-                }
-              }}
+              onGoogleSignIn={handleGoogleSignIn}
+              onEmailSignIn={handleEmailSignIn}
+              onEmailSignUp={handleEmailSignUp}
+              onPasswordReset={handlePasswordReset}
+              onContinueLocal={handleContinueLocal}
               onResendVerification={async () => {
                 try {
                   await resendVerificationEmail();
@@ -940,6 +1050,8 @@ function App() {
               onSignOut={async () => {
                 syncUnsubRef.current?.();
                 syncUnsubRef.current = null;
+                saveLocalGuestMode(false);
+                setLocalGuestMode(false);
                 await signOutAccount();
               }}
               onEnableSync={async ({ importLocal = false } = {}) => {

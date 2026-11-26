@@ -4,6 +4,7 @@ import { classifierForModel } from "../src/firebase-ai.js";
 import { supportsDeviceAI } from "../src/device-ai.js";
 import {
   DEMO_SEED_KEY,
+  DEMO_ACCOUNT_EMAIL,
   REDACTED_RECEIPT_SEED_KEY,
   REDACTED_RECEIPT_SOURCE,
   REDACTED_RECEIPT_FIXTURES,
@@ -40,6 +41,18 @@ import {
   translateRuntimeMessage,
 } from "../src/i18n.js";
 import { mapAuthError } from "../src/auth.js";
+import {
+  getCapturePrivacyStatus,
+  getDocumentPrivacyMeta,
+} from "../src/ai-privacy.js";
+import { suggestWorkflowTemplate } from "../src/workflow-templates.js";
+import {
+  nextIsoCalendarDay,
+  escapeIcsText,
+  icsFilename,
+  buildIcsEvent,
+  buildGoogleCalendarUrl,
+} from "../src/calendar-export.js";
 import {
   SYNC_COLLECTIONS,
   tombstoneKey,
@@ -1072,4 +1085,149 @@ test("auth error mapping, demo return routing, and account/sync i18n coverage", 
   }
   assert.match(tEn("importPromptBody", { docs: 2, actions: 3 }), /2 local document.*3 follow-up/);
   assert.match(tId("importPromptBody", { docs: 2, actions: 3 }), /2 dokumen lokal.*3 tindak lanjut/);
+});
+
+test("demo identity, standalone login return routing, and Hybrid AI privacy metadata", () => {
+  assert.equal(DEMO_ACCOUNT_EMAIL, "demo@example.com");
+  assert.equal(demoWorkspaceHref("/", "/login"), "/?demo=1&from=%2Flogin#/home");
+  assert.equal(exitDemoHref("/", "?demo=1&from=%2Flogin"), "/#/login");
+
+  assert.deepEqual(
+    getCapturePrivacyStatus({
+      mode: "rules",
+      configured: true,
+      deviceSupported: false,
+      consent: false,
+    }),
+    {
+      tone: "green",
+      iconKey: "shield",
+      badgeKey: "privacyBadgeLocalRules",
+      detailKey: "privacyDetailRulesConnected",
+    },
+  );
+  assert.equal(
+    getCapturePrivacyStatus({
+      mode: "device",
+      configured: true,
+      deviceSupported: true,
+      consent: false,
+    }).badgeKey,
+    "privacyBadgeOnDevice",
+  );
+  assert.equal(
+    getCapturePrivacyStatus({
+      mode: "hybrid",
+      configured: true,
+      deviceSupported: true,
+      consent: false,
+    }).detailKey,
+    "privacyDetailHybridNeedsConsent",
+  );
+  assert.equal(
+    getCapturePrivacyStatus({
+      mode: "hybrid",
+      configured: true,
+      deviceSupported: false,
+      consent: true,
+    }).detailKey,
+    "privacyDetailCloudConsented",
+  );
+
+  assert.equal(getDocumentPrivacyMeta("Firebase · on device").labelKey, "privacyDocOnDevice");
+  assert.equal(getDocumentPrivacyMeta("Firebase · cloud").labelKey, "privacyDocCloud");
+  assert.equal(getDocumentPrivacyMeta("Local rules").labelKey, "privacyDocLocalRules");
+  assert.equal(getDocumentPrivacyMeta("Manual filing").labelKey, "privacyDocManual");
+  assert.equal(getDocumentPrivacyMeta("Firebase · unsuccessful").labelKey, "privacyDocRetry");
+  assert.equal(getDocumentPrivacyMeta("Synced progress").labelKey, "privacyDocSynced");
+  assert.equal(getDocumentPrivacyMeta("Synthetic sample · seeded example").labelKey, "");
+});
+
+test("workflow templates match all 5 categories in EN/ID, clamp titles, and return null for unmatched Other", () => {
+  const cases = [
+    ["Money & Bills", "bill-payment", 3],
+    ["Home & Living", "membership-renewal", 3],
+    ["Work & Study", "work-study-submission", 3],
+    ["Purchases", "purchase-warranty", 3],
+    ["Personal Records", "personal-record-check", 2],
+  ];
+  for (const [category, expectedId, expectedSteps] of cases) {
+    const longTitle = `${category} document ` + "X".repeat(90);
+    const tplEn = suggestWorkflowTemplate(
+      {
+        title: longTitle,
+        category,
+        tags: [],
+        text: "",
+        followUp: { due: "2026-12-20" },
+      },
+      "en",
+    );
+    const tplId = suggestWorkflowTemplate(
+      {
+        title: category,
+        category,
+        tags: [],
+        text: "",
+        followUp: { due: "2026-12-20" },
+      },
+      "id",
+    );
+    assert.equal(tplEn.id, expectedId);
+    assert.equal(tplEn.steps.length, expectedSteps);
+    assert.ok(tplEn.groupTitle.length <= 80);
+    assert.equal(tplEn.steps[1].due, "2026-12-20");
+    assert.notEqual(tplEn.label, tplId.label);
+    assert.notEqual(tplEn.steps[0].title, tplId.steps[0].title);
+  }
+
+  assert.equal(
+    suggestWorkflowTemplate({ title: "Random memo", category: "Other", text: "Notes", tags: [] }),
+    null,
+  );
+  assert.equal(
+    suggestWorkflowTemplate({
+      title: "Faktur listrik",
+      category: "Other",
+      text: "Tagihan bulan November",
+      tags: [],
+    })?.id,
+    "bill-payment",
+  );
+});
+
+test("calendar export builds RFC 5545 .ics events and Google Calendar links accurately", () => {
+  assert.equal(nextIsoCalendarDay("2026-12-31"), "2027-01-01");
+  assert.equal(nextIsoCalendarDay("2028-02-28"), "2028-02-29");
+  assert.equal(nextIsoCalendarDay("invalid"), "");
+  assert.equal(escapeIcsText("Pay, bill; now\nLine 2\\end"), "Pay\\, bill\\; now\\nLine 2\\\\end");
+
+  const action = {
+    id: "act-1",
+    title: "Pay water invoice, #1",
+    due: "2026-12-31",
+    quote: "Total due: USD 30.00",
+  };
+  const doc = { title: "City water bill" };
+  assert.equal(icsFilename(action), "tuntas-pay-water-invoice-1-2026-12-31.ics");
+
+  const ics = buildIcsEvent(action, doc, {
+    groupTitle: "Monthly bills",
+    now: new Date(Date.UTC(2026, 10, 26, 12, 0, 0)),
+  });
+  assert.ok(ics.includes("BEGIN:VCALENDAR\r\n"));
+  assert.ok(ics.includes("DTSTART;VALUE=DATE:20261231\r\n"));
+  assert.ok(ics.includes("DTEND;VALUE=DATE:20270101\r\n"));
+  assert.ok(ics.includes("SUMMARY:Pay water invoice\\, #1\r\n"));
+  assert.ok(ics.includes("UID:act-1@tuntas.app\r\n"));
+
+  const gcal = buildGoogleCalendarUrl(action, doc, { groupTitle: "Monthly bills" });
+  const parsed = new URL(gcal);
+  assert.equal(parsed.origin, "https://calendar.google.com");
+  assert.equal(parsed.searchParams.get("action"), "TEMPLATE");
+  assert.equal(parsed.searchParams.get("text"), "Pay water invoice, #1");
+  assert.equal(parsed.searchParams.get("dates"), "20261231/20270101");
+
+  assert.equal(buildIcsEvent({ id: "a2", title: "No date", due: "" }), null);
+  assert.equal(buildGoogleCalendarUrl({ id: "a2", title: "No date", due: "" }), "");
 });

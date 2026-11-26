@@ -59,6 +59,7 @@ export function AccountPage({
   onDisableSync,
   onSyncNow,
   onImportLocal,
+  onContinueLocal,
 }) {
   const lang = useLang();
   const t = createTranslator(lang);
@@ -167,7 +168,11 @@ export function AccountPage({
                 <strong>{t("accountUnavailableTitle")}</strong>
                 <p>{t("accountUnavailableBody")}</p>
                 <div className="button-line">
-                  <a className="primary" href="#/home">
+                  <a
+                    className="primary"
+                    href="#/home"
+                    onClick={() => onContinueLocal?.()}
+                  >
                     {t("continueOnThisDevice")}
                   </a>
                   <a
@@ -338,7 +343,11 @@ export function AccountPage({
               </form>
 
               <div className="account-alt-paths">
-                <a className="secondary" href="#/home">
+                <a
+                  className="secondary"
+                  href="#/home"
+                  onClick={() => onContinueLocal?.()}
+                >
                   <Monitor size={16} aria-hidden="true" />
                   <span>{t("continueOnThisDevice")}</span>
                 </a>

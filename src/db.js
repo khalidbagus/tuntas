@@ -1,6 +1,10 @@
 import { openDB } from "idb";
 import { fingerprint } from "./domain.js";
-import { isValidIsoDate, validateDependency } from "./actions-domain.js";
+import {
+  dependencyId,
+  isValidIsoDate,
+  validateDependency,
+} from "./actions-domain.js";
 import { tombstoneKey } from "./sync-domain.js";
 import {
   PERSONAL_DB_NAME,
@@ -1112,4 +1116,121 @@ export async function importLocalWorkspaceIntoCurrent(uid = activeWorkspaceUid) 
   await tx.done;
 
   return { importedDocs, importedActions, importedGroups };
+}
+
+export async function applyWorkflowTemplate(documentId, template) {
+  if (!template || !template.id || !Array.isArray(template.steps) || !template.steps.length) {
+    throw Error("Invalid workflow template.");
+  }
+  const cleanGroupTitle = String(template.groupTitle ?? "").trim().slice(0, 80);
+  if (!cleanGroupTitle) throw Error("Give your group a short name.");
+
+  const database = await getDB();
+  const tx = database.transaction(
+    ["documents", "actionGroups", "actions", "actionDependencies"],
+    "readwrite",
+  );
+  const docsStore = tx.objectStore("documents");
+  const groupsStore = tx.objectStore("actionGroups");
+  const actionsStore = tx.objectStore("actions");
+  const depsStore = tx.objectStore("actionDependencies");
+
+  const doc = await docsStore.get(documentId);
+  if (!doc) {
+    await tx.done;
+    throw Error("Document not found.");
+  }
+
+  const appliedIds = Array.isArray(doc.appliedTemplateIds)
+    ? doc.appliedTemplateIds
+    : [];
+  const appliedGroups =
+    doc.appliedTemplateGroupIds && typeof doc.appliedTemplateGroupIds === "object"
+      ? doc.appliedTemplateGroupIds
+      : {};
+  if (appliedIds.includes(template.id)) {
+    await tx.done;
+    return {
+      created: false,
+      groupId: appliedGroups[template.id] || "",
+      actionCount: 0,
+      dependencyCount: 0,
+    };
+  }
+
+  const now = Date.now();
+  const group = {
+    id: crypto.randomUUID(),
+    title: cleanGroupTitle,
+    created: now,
+    updated: now,
+    updatedAt: now,
+    _dirty: true,
+  };
+  await groupsStore.add(group);
+
+  const quote = String(doc.followUp?.quote || doc.proposal?.evidence || "").slice(
+    0,
+    320,
+  );
+  const createdActions = [];
+  for (let idx = 0; idx < template.steps.length; idx += 1) {
+    const step = template.steps[idx];
+    const cleanTitle = String(step?.title ?? "").trim().slice(0, 140);
+    if (!cleanTitle) continue;
+    const due =
+      typeof step?.due === "string" && isValidIsoDate(step.due)
+        ? step.due.trim()
+        : "";
+    const stepTs = now + idx;
+    const action = {
+      id: crypto.randomUUID(),
+      documentId,
+      title: cleanTitle,
+      due,
+      done: false,
+      created: stepTs,
+      updatedAt: stepTs,
+      _dirty: true,
+      groupId: group.id,
+      suggestionKey: `template:${template.id}:${step.key || idx}`,
+      ...(quote ? { quote } : {}),
+    };
+    await actionsStore.add(action);
+    createdActions.push(action);
+  }
+
+  let dependencyCount = 0;
+  for (const pair of template.links || []) {
+    if (!Array.isArray(pair) || pair.length !== 2) continue;
+    const prereq = createdActions[pair[0]];
+    const dependent = createdActions[pair[1]];
+    if (!prereq || !dependent || prereq.id === dependent.id) continue;
+    const depRecord = {
+      id: dependencyId(prereq.id, dependent.id),
+      prerequisiteActionId: prereq.id,
+      dependentActionId: dependent.id,
+      created: now,
+      updatedAt: now,
+      _dirty: true,
+    };
+    await depsStore.add(depRecord);
+    dependencyCount += 1;
+  }
+
+  await docsStore.put({
+    ...doc,
+    appliedTemplateIds: [...appliedIds, template.id],
+    appliedTemplateGroupIds: { ...appliedGroups, [template.id]: group.id },
+    updatedAt: now,
+    _dirty: true,
+  });
+
+  await tx.done;
+  return {
+    created: true,
+    groupId: group.id,
+    actionCount: createdActions.length,
+    dependencyCount,
+  };
 }

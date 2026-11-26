@@ -12,7 +12,13 @@ import {
   Unlink,
   Clock,
   AlertTriangle,
+  CalendarPlus,
+  ExternalLink,
 } from "lucide-react";
+import {
+  buildGoogleCalendarUrl,
+  downloadActionIcs,
+} from "./calendar-export.js";
 import {
   dependencyId,
   evaluateActionStates,
@@ -34,6 +40,7 @@ function ActionCard({
   state,
   groups,
   allActions,
+  groupTitle = "",
   todayIso,
   expanded,
   onToggleExpand,
@@ -42,6 +49,7 @@ function ActionCard({
   onAddDependency,
   onRemoveDependency,
   onJumpToStep,
+  onExportCalendar,
 }) {
   const lang = useLang();
   const t = createTranslator(lang);
@@ -294,6 +302,42 @@ function ActionCard({
                   </button>
                 )}
               </div>
+              <div className="calendar-export-block">
+                {isValidIsoDate(action.due) ? (
+                  <>
+                    <small className="subpanel-label">
+                      {t("calendarExportLabel")}
+                    </small>
+                    <div className="calendar-export-row">
+                      <button
+                        type="button"
+                        className="secondary compact-btn"
+                        onClick={() => {
+                          if (downloadActionIcs(action, doc, { groupTitle })) {
+                            onExportCalendar?.();
+                          }
+                        }}
+                      >
+                        <CalendarPlus size={15} aria-hidden="true" />
+                        <span>{t("downloadIcs")}</span>
+                      </button>
+                      <a
+                        className="secondary compact-btn"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        href={buildGoogleCalendarUrl(action, doc, {
+                          groupTitle,
+                        })}
+                      >
+                        <ExternalLink size={15} aria-hidden="true" />
+                        <span>{t("addToGoogleCalendar")}</span>
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <small>{t("calendarExportNeedsDue")}</small>
+                )}
+              </div>
             </form>
 
             <div className="action-subpanel">
@@ -486,6 +530,7 @@ export function Actions({
   onDeleteGroup,
   onAddDependency,
   onRemoveDependency,
+  onExportCalendar,
 }) {
   const lang = useLang();
   const t = createTranslator(lang);
@@ -933,6 +978,7 @@ export function Actions({
                             state={stateMap.get(a.id)}
                             groups={groups}
                             allActions={actions}
+                            groupTitle={group.title}
                             todayIso={todayIso}
                             expanded={expandedIds.has(a.id)}
                             onToggleExpand={toggleExpand}
@@ -941,6 +987,7 @@ export function Actions({
                             onAddDependency={onAddDependency}
                             onRemoveDependency={onRemoveDependency}
                             onJumpToStep={jumpToStep}
+                            onExportCalendar={onExportCalendar}
                           />
                         ))}
                       </div>
@@ -995,6 +1042,7 @@ export function Actions({
                               state={stateMap.get(a.id)}
                               groups={groups}
                               allActions={actions}
+                              groupTitle=""
                               todayIso={todayIso}
                               expanded={expandedIds.has(a.id)}
                               onToggleExpand={toggleExpand}
@@ -1003,6 +1051,7 @@ export function Actions({
                               onAddDependency={onAddDependency}
                               onRemoveDependency={onRemoveDependency}
                               onJumpToStep={jumpToStep}
+                              onExportCalendar={onExportCalendar}
                             />
                           ))
                         ) : (
@@ -1026,6 +1075,7 @@ export function Actions({
                       state={stateMap.get(a.id)}
                       groups={groups}
                       allActions={actions}
+                      groupTitle=""
                       todayIso={todayIso}
                       expanded={expandedIds.has(a.id)}
                       onToggleExpand={toggleExpand}
@@ -1034,6 +1084,7 @@ export function Actions({
                       onAddDependency={onAddDependency}
                       onRemoveDependency={onRemoveDependency}
                       onJumpToStep={jumpToStep}
+                      onExportCalendar={onExportCalendar}
                     />
                   ))}
                 </div>

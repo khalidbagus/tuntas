@@ -2192,6 +2192,227 @@ main > .note {
     border-color: var(--blue);
   }
 }
+.auth-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.auth-entry-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f7f9fc;
+}
+.auth-entry-top {
+  height: 69px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 clamp(16px, 4vw, 48px);
+}
+.auth-entry-top .brand {
+  padding-left: 0;
+  font-size: 24px;
+}
+.auth-entry-top .brand img {
+  width: 30px;
+}
+.auth-entry-main {
+  width: 100%;
+  max-width: 1100px;
+  margin: auto;
+  padding: clamp(24px, 4vw, 56px) clamp(16px, 4vw, 48px);
+}
+.auth-entry-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 480px);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: start;
+}
+.auth-entry-intro {
+  display: grid;
+  gap: 16px;
+  padding-top: 8px;
+}
+.auth-entry-intro .overline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.auth-entry-lead {
+  font-size: 16px;
+  max-width: 46ch;
+}
+.auth-highlights {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.auth-highlights li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.auth-entry-card {
+  width: 100%;
+  max-width: none;
+  gap: 16px;
+}
+.auth-submit-btn {
+  width: 100%;
+}
+.auth-demo-box {
+  background: #f4f7fc;
+  border: 1px solid #d4dfef;
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+.auth-demo-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.demo-email-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #bfd1f5;
+  color: #17243b;
+  font-size: 12px;
+  font-weight: 600;
+}
+.auth-demo-box p {
+  font-size: 13px;
+}
+.auth-local-btn {
+  min-height: 44px;
+  font-size: 13px;
+  padding: 0 14px;
+}
+.privacy-strip {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.privacy-strip-detail {
+  margin-top: 0 !important;
+  color: var(--muted);
+}
+.privacy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  border: 1px solid transparent;
+}
+.privacy-badge.is-green {
+  background: #e8f5ec;
+  color: #24623b;
+  border-color: #c3e2cd;
+}
+.privacy-badge.is-blue {
+  background: #eaf0ff;
+  color: #194fcf;
+  border-color: #c7d7fb;
+}
+.privacy-badge.is-amber {
+  background: #fff2d6;
+  color: #774a12;
+  border-color: #ecd29d;
+}
+.privacy-badge.is-neutral {
+  background: #eef2f8;
+  color: #3c4e67;
+  border-color: #d5dfec;
+}
+.workflow-template-card {
+  background: #f5f7fb;
+  border: 1px solid #cad7ee;
+  border-radius: 12px;
+  padding: 15px;
+  display: grid;
+  gap: 10px;
+}
+.workflow-template-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+}
+.workflow-step-preview {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.workflow-step-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.workflow-step-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #eaf0ff;
+  color: #194fcf;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.workflow-step-text {
+  display: grid;
+  gap: 1px;
+}
+.workflow-step-text small {
+  font-size: 11px;
+}
+.workflow-step-arrow {
+  color: var(--muted);
+}
+.calendar-export-block {
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  display: grid;
+  gap: 7px;
+}
+.calendar-export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 860px) {
+  .auth-entry-grid {
+    grid-template-columns: 1fr;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *:before,

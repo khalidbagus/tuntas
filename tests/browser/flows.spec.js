@@ -470,7 +470,10 @@ test("ambiguous date follow-up leaves due blank and dismiss creates zero actions
   await page.getByRole("button", { name: "Add follow-up" }).click();
   await expect(page.getByLabel(/Due date/)).toHaveValue("");
   await page.getByRole("button", { name: "Cancel" }).click();
-  await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Suggested follow-up" })
+    .getByRole("button", { name: "Dismiss", exact: true })
+    .click();
   await expect(
     page.getByRole("region", { name: "Suggested follow-up" }),
   ).toHaveCount(0);
@@ -1602,4 +1605,105 @@ test("account entry without Firebase Auth config supports local-only continuatio
 
   await page.getByRole("link", { name: "Continue on this device" }).click();
   await expect(page).toHaveURL(/#\/home$/);
+});
+
+test("Milestone 1 & 2: standalone #/login demo entry, Hybrid AI privacy indicator, 1-click workflow template, and calendar export", async ({
+  page,
+}) => {
+  await page.goto("/#/login");
+  await expect(page.getByRole("heading", { name: "Sign in to Tuntas" })).toBeVisible();
+  await expect(page.locator(".rail")).toHaveCount(0);
+  await expect(page.locator(".bottom-nav")).toHaveCount(0);
+  await expect(page.getByText("demo@example.com", { exact: true })).toBeVisible();
+
+  const loginAxe = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(loginAxe.violations).toEqual([]);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByLabel("Language").selectOption("id");
+  await expect(page.getByRole("heading", { name: "Masuk ke Tuntas" })).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
+  await page.getByLabel("Bahasa").selectOption("en");
+  await page.setViewportSize({ width: 1280, height: 850 });
+
+  await page.getByRole("link", { name: "Enter demo" }).click();
+  await expect(page).toHaveURL(/\?demo=1&from=%2Flogin#\/home$/);
+  await expect(page.locator(".demo-bar")).toContainText("demo@example.com");
+  await page.getByRole("link", { name: "Exit demo" }).click();
+  await expect(page).toHaveURL(/\/#\/login$/);
+
+  // Capture privacy indicator & 1-click workflow template
+  await page.getByRole("button", { name: "Continue on this device" }).click();
+  await expect(page).toHaveURL(/#\/home$/);
+  await page.goto("/#/capture");
+  await expect(page.locator(".privacy-strip")).toContainText("Local rules · On device");
+
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page
+    .getByLabel("Document text")
+    .fill("Monthly fiber bill\nInvoice #FB-209\nTotal: USD 45.00\nPay invoice by 20 December 2026.");
+  await page.getByRole("button", { name: "Save & organize" }).click();
+  await expect(page.getByRole("heading", { name: "Monthly fiber bill" })).toBeVisible();
+  await expect(page.locator(".status-line .privacy-badge")).toContainText(
+    "Processed locally · Rules only",
+  );
+
+  const templateCard = page.getByRole("region", { name: "Suggested workflow template" });
+  await expect(templateCard).toBeVisible();
+  await expect(templateCard).toContainText("3 connected steps");
+  await templateCard.getByRole("button", { name: "Create 3-step workflow" }).click();
+  await expect(templateCard).toContainText("Workflow created");
+  await page.reload();
+  await expect(
+    page.getByRole("region", { name: "Suggested workflow template" }),
+  ).toContainText("Workflow created");
+
+  await page.getByRole("link", { name: "Open in Actions" }).click();
+  const group = page.getByRole("region", { name: "Monthly fiber bill" });
+  await expect(group).toBeVisible();
+  await expect(group.getByText("0 of 3 steps completed")).toBeVisible();
+  await expect(group.locator(".action-card").nth(1)).toContainText("Waiting on 1 step");
+
+  // Calendar export on dated action & hint on undated action
+  const payStep = group.locator(".action-card", {
+    hasText: "Pay bill before due date",
+  });
+  await payStep.getByRole("button", { name: "Details" }).click();
+  const gcalLink = payStep.getByRole("link", { name: "Google Calendar" });
+  await expect(gcalLink).toHaveAttribute(
+    "href",
+    /https:\/\/calendar\.google\.com\/calendar\/render\?/,
+  );
+  await expect(gcalLink).toHaveAttribute("href", /dates=20261220%2F20261221/);
+
+  const downloadPromise = page.waitForEvent("download");
+  await payStep.getByRole("button", { name: "Download .ics" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("tuntas-pay-bill-before-due-date-2026-12-20.ics");
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const icsContent = Buffer.concat(chunks).toString("utf8");
+  expect(icsContent).toContain("BEGIN:VCALENDAR");
+  expect(icsContent).toContain("DTSTART;VALUE=DATE:20261220");
+  expect(icsContent).toContain("DTEND;VALUE=DATE:20261221");
+
+  const verifyStep = group.locator(".action-card", {
+    has: page.getByRole("checkbox", {
+      name: /Verify bill amount and reference/,
+    }),
+  });
+  await verifyStep.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(
+    verifyStep.getByText("Save a due date above to export a calendar reminder."),
+  ).toBeVisible();
+
+  const actionsAxe = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(actionsAxe.violations).toEqual([]);
 });

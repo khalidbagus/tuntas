@@ -13,12 +13,22 @@ import {
   Check,
   Trash2,
   AlertTriangle,
+  Cpu,
+  Cloud,
+  Sparkles,
+  GitBranch,
+  ArrowRight,
 } from "lucide-react";
 import { Heading, date } from "./ui.jsx";
 import { configured } from "./engine.js";
 import { original } from "./db.js";
 import { categories, formatCalendarDate } from "./domain.js";
 import { supportsDeviceAI } from "./device-ai.js";
+import {
+  getCapturePrivacyStatus,
+  getDocumentPrivacyMeta,
+} from "./ai-privacy.js";
+import { suggestWorkflowTemplate } from "./workflow-templates.js";
 import {
   LOCAL_RECEIPT_SOURCE,
   REDACTED_RECEIPT_SOURCE,
@@ -31,6 +41,25 @@ import {
   translateMode,
   translateRuntimeMessage,
 } from "./i18n.js";
+const PRIVACY_ICONS = {
+  shield: ShieldCheck,
+  cpu: Cpu,
+  cloud: Cloud,
+  sparkles: Sparkles,
+  alert: AlertTriangle,
+  monitor: Monitor,
+};
+
+function PrivacyBadge({ tone, iconKey, label }) {
+  const Icon = PRIVACY_ICONS[iconKey] || ShieldCheck;
+  return (
+    <span className={"chip privacy-badge is-" + tone}>
+      <Icon size={13} aria-hidden="true" />
+      <span>{label}</span>
+    </span>
+  );
+}
+
 export function Mode({
   mode,
   setMode,
@@ -42,6 +71,13 @@ export function Mode({
 }) {
   const lang = useLang();
   const t = createTranslator(lang);
+  const deviceSupported = supportsDeviceAI();
+  const privacy = getCapturePrivacyStatus({
+    mode,
+    configured,
+    deviceSupported,
+    consent,
+  });
   const payloadLabel =
     mime?.startsWith("image/") ||
     payloadKind === "camera" ||
@@ -54,6 +90,14 @@ export function Mode({
           : t("payloadFallback");
   return (
     <div className="mode">
+      <div className="privacy-strip">
+        <PrivacyBadge
+          tone={privacy.tone}
+          iconKey={privacy.iconKey}
+          label={t(privacy.badgeKey)}
+        />
+        <small className="privacy-strip-detail">{t(privacy.detailKey)}</small>
+      </div>
       <label>
         {t("processingMethod")}
         <select
@@ -66,7 +110,7 @@ export function Mode({
           <option value="rules">{t("modeRules")}</option>
           {configured && (
             <>
-              <option value="device" disabled={!supportsDeviceAI()}>
+              <option value="device" disabled={!deviceSupported}>
                 {t("modeDevice")}
               </option>
               <option value="hybrid">{t("modeHybrid")}</option>
@@ -76,7 +120,7 @@ export function Mode({
       </label>
       {mode === "hybrid" ? (
         <div>
-          {!supportsDeviceAI() && (
+          {!deviceSupported && (
             <small>{t("onDeviceUnavailableHint")}</small>
           )}
           <label className="checkline">
@@ -321,6 +365,8 @@ export function Detail({
   retry,
   add,
   dismissFollowUp,
+  applyTemplate,
+  dismissTemplate,
   modeProps,
   ready,
   busy,
@@ -332,6 +378,7 @@ export function Detail({
     [adding, setAdding] = useState(false),
     [confirmingDelete, setConfirmingDelete] = useState(false),
     [deletingDoc, setDeletingDoc] = useState(false),
+    [applyingTemplate, setApplyingTemplate] = useState(false),
     [title, setTitle] = useState(doc.title),
     [category, setCategory] = useState(doc.category),
     [tags, setTags] = useState(doc.tags.join(", ")),
@@ -352,7 +399,21 @@ export function Detail({
     confirmedAction = suggestion
       ? actions.find((a) => a.suggestionKey === suggestion.key)
       : null,
-    showSuggestion = Boolean(suggestion && !doc.followUpDismissed);
+    showSuggestion = Boolean(suggestion && !doc.followUpDismissed),
+    docPrivacy = getDocumentPrivacyMeta(doc.mode),
+    workflowTemplate =
+      filed && !doc.workflowTemplateDismissed
+        ? suggestWorkflowTemplate(doc, lang)
+        : null,
+    templateAlreadyApplied = Boolean(
+      workflowTemplate && doc.appliedTemplateIds?.includes(workflowTemplate.id),
+    ),
+    docAlreadyInGroup = actions.some((a) => Boolean(a.groupId)),
+    showWorkflowTemplate = Boolean(
+      workflowTemplate &&
+        applyTemplate &&
+        (templateAlreadyApplied || !docAlreadyInGroup),
+    );
   useEffect(() => {
     setTitle(doc.title);
     setCategory(doc.category);
@@ -442,7 +503,15 @@ export function Detail({
           {doc.remoteOnly && (
             <span className="chip blue">{t("remoteOnlyChip")}</span>
           )}
-          <small>{translateMode(doc.mode, lang)}</small>
+          <PrivacyBadge
+            tone={docPrivacy.tone}
+            iconKey={docPrivacy.iconKey}
+            label={
+              docPrivacy.labelKey
+                ? t(docPrivacy.labelKey)
+                : translateMode(docPrivacy.fallbackLabel, lang)
+            }
+          />
         </div>
         {!filed && (
           <div className="note">
@@ -704,6 +773,99 @@ export function Detail({
                   >
                     {t("dismiss")}
                   </button>
+                </>
+              )}
+            </div>
+          </section>
+        )}
+        {showWorkflowTemplate && (
+          <section
+            className="workflow-template-card"
+            aria-label={t("workflowTemplateHeading")}
+          >
+            <div className="followup-top">
+              <span className="workflow-template-title">
+                <GitBranch size={16} aria-hidden="true" />
+                <strong>{t("workflowTemplateHeading")}</strong>
+              </span>
+              <div className="button-line">
+                <span className="chip blue">
+                  {t("workflowTemplateStepCount", {
+                    count: workflowTemplate.steps.length,
+                  })}
+                </span>
+                {templateAlreadyApplied && (
+                  <span className="chip green">
+                    {t("workflowTemplateAppliedChip")}
+                  </span>
+                )}
+              </div>
+            </div>
+            <small>{workflowTemplate.label}</small>
+            <ol className="workflow-step-preview">
+              {workflowTemplate.steps.map((step, idx) => (
+                <li key={step.key} className="workflow-step-item">
+                  <span className="workflow-step-num">{idx + 1}</span>
+                  <span className="workflow-step-text">
+                    <span>{step.title}</span>
+                    {step.due && (
+                      <small>
+                        {t("duePrefix", {
+                          date: formatCalendarDate(step.due, locale),
+                        })}
+                      </small>
+                    )}
+                  </span>
+                  {idx < workflowTemplate.steps.length - 1 && (
+                    <ArrowRight
+                      size={14}
+                      className="workflow-step-arrow"
+                      aria-hidden="true"
+                    />
+                  )}
+                </li>
+              ))}
+            </ol>
+            <div className="button-line">
+              {templateAlreadyApplied ? (
+                <a className="text-link" href="#/actions">
+                  {t("openInActions")}
+                </a>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy || applyingTemplate}
+                    onClick={async () => {
+                      if (applyingTemplate) return;
+                      setApplyingTemplate(true);
+                      try {
+                        await applyTemplate(doc, workflowTemplate);
+                      } finally {
+                        setApplyingTemplate(false);
+                      }
+                    }}
+                  >
+                    <GitBranch size={16} aria-hidden="true" />
+                    <span>
+                      {applyingTemplate
+                        ? t("creatingWorkflow")
+                        : t("createWorkflowButton", {
+                            count: workflowTemplate.steps.length,
+                          })}
+                    </span>
+                  </button>
+                  {dismissTemplate && (
+                    <button
+                      type="button"
+                      className="link-button"
+                      disabled={busy || applyingTemplate}
+                      onClick={() => dismissTemplate(doc)}
+                    >
+                      {t("dismiss")}
+                    </button>
+                  )}
                 </>
               )}
             </div>

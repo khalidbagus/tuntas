@@ -2,6 +2,7 @@ import { fingerprint, validateFile } from "./domain.js";
 
 export const PERSONAL_DB_NAME = "tuntas-workspace-v1";
 export const DEMO_DB_NAME = "tuntas-demo-workspace-v1";
+export const DEMO_ACCOUNT_EMAIL = "demo@example.com";
 export const DEMO_SEED_KEY = "demo-seed-v1";
 export const REDACTED_RECEIPT_SEED_KEY = "demo-redacted-receipts-v1";
 export const REDACTED_RECEIPT_SOURCE = "Redacted receipt sample";

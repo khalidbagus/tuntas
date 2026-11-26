@@ -187,6 +187,12 @@ const runtimeMessages = {
   "Verification status updated.": "Status verifikasi diperbarui.",
   "Password reset email sent. Check your inbox.":
     "Email pengaturan ulang kata sandi dikirim. Periksa kotak masuk Anda.",
+  "Workflow template created in Actions.":
+    "Alur kerja dibuat di Tindakan.",
+  "Workflow template already added.": "Alur kerja sudah ditambahkan.",
+  "Workflow template dismissed.": "Saran alur kerja diabaikan.",
+  "Calendar reminder downloaded.": "Pengingat kalender diunduh.",
+  "Invalid workflow template.": "Templat alur kerja tidak valid.",
 };
 
 export function translateRuntimeMessage(message, lang) {
@@ -640,6 +646,52 @@ const messages = {
     remoteOnlyChip: "Synced from another device",
     originalUnavailableOnDevice:
       "Original file, extracted text, and evidence excerpts stay on the device where this document was captured. Original-file sync is not included on this plan.",
+    authEntryKicker: "Paperwork workspace",
+    authEntryTitle: "Sign in to Tuntas",
+    authHighlightLocal:
+      "Originals, extracted text, and evidence excerpts stay in your browser storage.",
+    authHighlightHybrid:
+      "Hybrid AI prefers Chrome on-device inference and asks before using cloud Gemini.",
+    authHighlightSync:
+      "Opt-in account sync keeps titles, filing status, and action progress updated across devices.",
+    authDemoHint:
+      "Preview a pre-filled synthetic workspace as demo@example.com with zero cloud writes.",
+    enterDemo: "Enter demo",
+    demoIdentityBadge: "Demo account",
+    privacyBadgeLocalRules: "Local rules · On device",
+    privacyBadgeOnDevice: "On-device AI · No cloud upload",
+    privacyBadgeHybridPreferDevice: "Hybrid AI · Prefers on-device",
+    privacyBadgeCloudOptIn: "Cloud Gemini · Explicit opt-in",
+    privacyDetailRulesConnected:
+      "Runs deterministic text matching locally; nothing leaves this device.",
+    privacyDetailRulesDisconnected:
+      "Runs deterministic text matching locally without network AI calls.",
+    privacyDetailOnDevice:
+      "Uses Chrome’s built-in on-device Gemini model; your document stays offline.",
+    privacyDetailHybridConsented:
+      "Tries on-device AI first; cloud fallback permitted for this document only.",
+    privacyDetailHybridNeedsConsent:
+      "Tries on-device AI first; confirm permission below only if cloud fallback is needed.",
+    privacyDetailCloudConsented:
+      "On-device AI is unavailable here; you allowed cloud Gemini for this document.",
+    privacyDetailCloudNeedsConsent:
+      "On-device AI is unavailable here; confirm permission below before sending this document.",
+    privacyDocOnDevice: "Processed on device · Chrome Gemini",
+    privacyDocCloud: "Processed with Cloud Gemini · Consented",
+    privacyDocLocalRules: "Processed locally · Rules only",
+    privacyDocManual: "Filed manually · On device",
+    privacyDocRetry: "AI processing incomplete · On device",
+    privacyDocSynced: "Progress metadata synced",
+    workflowTemplateHeading: "Suggested workflow template",
+    workflowTemplateStepCount: ({ count }) => `${count} connected steps`,
+    workflowTemplateAppliedChip: "Workflow created",
+    createWorkflowButton: ({ count }) => `Create ${count}-step workflow`,
+    creatingWorkflow: "Creating workflow…",
+    calendarExportLabel: "Calendar export",
+    downloadIcs: "Download .ics",
+    addToGoogleCalendar: "Google Calendar",
+    calendarExportNeedsDue:
+      "Save a due date above to export a calendar reminder.",
   },
   id: {
     skipToContent: "Lewati ke konten",
@@ -1086,6 +1138,52 @@ const messages = {
     remoteOnlyChip: "Disinkronkan dari perangkat lain",
     originalUnavailableOnDevice:
       "File asli, teks yang diekstrak, dan kutipan bukti tetap berada di perangkat tempat dokumen ini ditangkap. Sinkronisasi file asli tidak termasuk dalam paket ini.",
+    authEntryKicker: "Ruang kerja dokumen",
+    authEntryTitle: "Masuk ke Tuntas",
+    authHighlightLocal:
+      "Dokumen asli, teks yang diekstrak, dan kutipan bukti tetap tersimpan di browser Anda.",
+    authHighlightHybrid:
+      "AI Hibrida mengutamakan model di perangkat Chrome dan selalu meminta izin sebelum memakai cloud Gemini.",
+    authHighlightSync:
+      "Sinkronisasi akun opsional menjaga judul, status pengarsipan, dan progres tindakan tetap selaras lintas perangkat.",
+    authDemoHint:
+      "Jelajahi ruang kerja sintetis siap pakai sebagai demo@example.com tanpa penulisan cloud.",
+    enterDemo: "Masuk demo",
+    demoIdentityBadge: "Akun demo",
+    privacyBadgeLocalRules: "Aturan lokal · Di perangkat",
+    privacyBadgeOnDevice: "AI di perangkat · Tanpa unggah cloud",
+    privacyBadgeHybridPreferDevice: "AI Hibrida · Utamakan perangkat",
+    privacyBadgeCloudOptIn: "Cloud Gemini · Izin eksplisit",
+    privacyDetailRulesConnected:
+      "Menjalankan pencocokan teks lokal secara deterministik; tidak ada data yang keluar dari perangkat ini.",
+    privacyDetailRulesDisconnected:
+      "Menjalankan pencocokan teks lokal tanpa panggilan AI jaringan.",
+    privacyDetailOnDevice:
+      "Menggunakan model Gemini bawaan Chrome di perangkat; dokumen tetap offline.",
+    privacyDetailHybridConsented:
+      "Mencoba AI di perangkat terlebih dahulu; cadangan cloud diizinkan hanya untuk dokumen ini.",
+    privacyDetailHybridNeedsConsent:
+      "Mencoba AI di perangkat terlebih dahulu; konfirmasi izin di bawah hanya jika cadangan cloud diperlukan.",
+    privacyDetailCloudConsented:
+      "AI di perangkat tidak tersedia di sini; Anda mengizinkan cloud Gemini untuk dokumen ini.",
+    privacyDetailCloudNeedsConsent:
+      "AI di perangkat tidak tersedia di sini; konfirmasi izin di bawah sebelum mengirim dokumen ini.",
+    privacyDocOnDevice: "Diproses di perangkat · Chrome Gemini",
+    privacyDocCloud: "Diproses dengan Cloud Gemini · Atas izin",
+    privacyDocLocalRules: "Diproses lokal · Aturan saja",
+    privacyDocManual: "Diarsipkan manual · Di perangkat",
+    privacyDocRetry: "Pemrosesan AI belum selesai · Di perangkat",
+    privacyDocSynced: "Metadata progres tersinkron",
+    workflowTemplateHeading: "Saran templat alur kerja",
+    workflowTemplateStepCount: ({ count }) => `${count} langkah terhubung`,
+    workflowTemplateAppliedChip: "Alur dibuat",
+    createWorkflowButton: ({ count }) => `Buat alur ${count} langkah`,
+    creatingWorkflow: "Membuat alur…",
+    calendarExportLabel: "Ekspor kalender",
+    downloadIcs: "Unduh .ics",
+    addToGoogleCalendar: "Google Calendar",
+    calendarExportNeedsDue:
+      "Simpan tanggal tenggat di atas untuk mengekspor pengingat kalender.",
   },
 };
 
