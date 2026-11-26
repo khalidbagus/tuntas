@@ -68,12 +68,28 @@ export async function processDocument(
       ...(result.followUp ? { followUpDismissed: false } : {}),
     });
   } catch (e) {
-    const message =
-      usingAI && read && !e?.message?.startsWith("The on-device model")
-        ? read.image
+    if (usingAI) console.error("[Tuntas AI]", e);
+    const rawMsg = String(e?.message || e || "");
+    let message = rawMsg;
+    if (usingAI && read && !rawMsg.startsWith("The on-device model")) {
+      if (
+        /app[\s-]?check|recaptcha|permission_denied|api[_\s-]?key|unauthenticated|forbidden|\b401\b|\b403\b/i.test(
+          rawMsg,
+        )
+      ) {
+        message =
+          "Firebase AI access was blocked (App Check or API permission). Retry or file manually.";
+      } else if (/\b429\b|resource_exhausted|quota/i.test(rawMsg)) {
+        message =
+          "Firebase AI is temporarily rate-limited. Wait a moment and retry, or file manually.";
+      } else if (/timed out|timeout|aborted/i.test(rawMsg)) {
+        message = "AI analysis timed out. Retry or file manually.";
+      } else {
+        message = read.image
           ? "AI analysis did not finish with a usable result. Retry or file manually."
-          : "AI analysis did not finish with a usable result. Retry, choose local rules, or file manually."
-        : e.message;
+          : "AI analysis did not finish with a usable result. Retry, choose local rules, or file manually.";
+      }
+    }
     return change(doc.id, {
       status: "error",
       reason: message,

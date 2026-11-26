@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifierForModel } from "../src/firebase-ai.js";
+import {
+  classifierForModel,
+  CLOUD_MODEL_CHAIN,
+  parseModelJson,
+  sanitizeModelProposal,
+  runWithCloudModelFallback,
+} from "../src/firebase-ai.js";
 import { supportsDeviceAI } from "../src/device-ai.js";
 import {
   DEMO_SEED_KEY,
@@ -1429,4 +1435,81 @@ test("DEMO_EXTRA_RECEIPTS and buildInitialDemoSplits provide redacted itemized r
   assert.ok(outgoing);
   assert.equal(outgoing.organizerEmail, DEMO_ACCOUNT_EMAIL);
   assert.equal(initial.sharesBySplit[outgoing.id][0].status, "paid_pending_confirm");
+});
+
+test("Firebase AI cloud model chain falls back, parses fenced JSON, and sanitizes >8 facts & blank values", async () => {
+  assert.deepEqual(CLOUD_MODEL_CHAIN, [
+    "gemini-4-hydrogen",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+  ]);
+
+  const fenced = "```json\n{\"title\":\"BCA Transfer\",\"category\":\"Money & Bills\"}\n```";
+  assert.equal(parseModelJson(fenced).title, "BCA Transfer");
+
+  // Simulate dense 11-fact BCA transfer slip with a blank Description row
+  const bcaRaw = {
+    title: "myBCA transfer receipt",
+    category: "Money & Bills",
+    confidence: "high",
+    evidence: "Transfer to BCA Virtual Account",
+    facts: [
+      { label: "Status", value: "Successful", quote: "Status : Successful" },
+      { label: "Transaction Date", value: "26 Nov 2026 11:44:28", quote: "Transaction Date : 26 Nov 2026 11:44:28" },
+      { label: "Description", value: "", quote: "Description :" },
+      { label: "Transfer Type", value: "Transfer to BCA Virtual Account", quote: "Transfer Type : Transfer to BCA Virtual Account" },
+      { label: "Source of Fund", value: "6290xxxx80", quote: "Source of Fund : 6290xxxx80" },
+      { label: "Pay Amount", value: "IDR 200,000.00", quote: "Pay Amount : IDR 200,000.00" },
+      { label: "Total Payment", value: "IDR 200,000.00", quote: "Total Payment : IDR 200,000.00" },
+      { label: "Reference No.", value: "9527120261126114428226TVA8987119800", quote: "Reference No. : 9527120261126114428226TVA8987119800" },
+      { label: "NPWP", value: "0013084496091000", quote: "NPWP: 0013084496091000" },
+      { label: "Company", value: "PT VISIONET INTERNASIONAL", quote: "Company/Product Name : PT VISIONET INTERNASIONAL" },
+      { label: "Bank", value: "PT BANK CENTRAL ASIA TBK", quote: "PT BANK CENTRAL ASIA TBK." },
+    ],
+  };
+  const sanitized = sanitizeModelProposal(bcaRaw);
+  assert.equal(sanitized.facts.length, 8);
+  assert.equal(
+    sanitized.facts.some((f) => f.label === "Description"),
+    false,
+  );
+  const validated = validateProposal(sanitized, "", { image: true });
+  assert.equal(validated.facts.length, 8);
+  assert.equal(validated.status, "needs_review");
+
+  // Fallback tries gemini-4-hydrogen then gemini-3.8-flash
+  const tried = [];
+  const res = await runWithCloudModelFallback(
+    [
+      { name: "gemini-4-hydrogen", model: { id: 1 } },
+      { name: "gemini-3.8-flash", model: { id: 2 } },
+      { name: "gemini-3.5-flash-lite", model: { id: 3 } },
+    ],
+    async (m, name) => {
+      tried.push(name);
+      if (name === "gemini-4-hydrogen") throw Error("429 Resource exhausted");
+      return `ok:${m.id}`;
+    },
+    { allowCloud: true },
+  );
+  assert.equal(res, "ok:2");
+  assert.deepEqual(tried, ["gemini-4-hydrogen", "gemini-3.8-flash"]);
+
+  // App Check / 403 error does not retry
+  const deniedTried = [];
+  await assert.rejects(
+    runWithCloudModelFallback(
+      [
+        { name: "gemini-4-hydrogen", model: { id: 1 } },
+        { name: "gemini-3.8-flash", model: { id: 2 } },
+      ],
+      async (_m, name) => {
+        deniedTried.push(name);
+        throw Error("403 App Check token invalid");
+      },
+      { allowCloud: true },
+    ),
+    /App Check/,
+  );
+  assert.deepEqual(deniedTried, ["gemini-4-hydrogen"]);
 });

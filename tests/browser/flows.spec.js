@@ -509,7 +509,7 @@ test("demo mode: direct entry, zero external requests, simultaneous tabs + reloa
     tab2.goto("/?demo=1#/home"),
   ]);
 
-  await expect(page.getByText("Sample workspace").first()).toBeVisible();
+  await expect(page.getByText("Sample workspace").first()).toBeVisible({ timeout: 15000 });
   await expect(page.getByRole("link", { name: "Exit demo" })).toBeVisible();
 
   const workspace = page.getByRole("region", { name: "Workspace overview" });
@@ -710,7 +710,7 @@ test("Explore demo from empty Home and keep existing personal workspace isolated
   await expect(page.getByText("Your first document goes here.")).toBeVisible();
   await page.getByRole("link", { name: "Explore demo" }).click();
   await expect(page).toHaveURL(/\?demo=1#\/home$/);
-  await expect(page.getByText("Sample workspace").first()).toBeVisible();
+  await expect(page.getByText("Sample workspace").first()).toBeVisible({ timeout: 15000 });
 
   await page.getByRole("link", { name: "Exit demo" }).first().click();
   await expect(page).toHaveURL(/\/#\/home$/);

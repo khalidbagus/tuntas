@@ -97,6 +97,12 @@ const runtimeMessages = {
     "Analisis AI tidak selesai dengan hasil yang dapat digunakan. Coba lagi atau arsipkan manual.",
   "AI analysis did not finish with a usable result. Retry, choose local rules, or file manually.":
     "Analisis AI tidak selesai dengan hasil yang dapat digunakan. Coba lagi, pilih aturan lokal, atau arsipkan manual.",
+  "Firebase AI access was blocked (App Check or API permission). Retry or file manually.":
+    "Akses Firebase AI diblokir (App Check atau izin API). Coba lagi atau arsipkan manual.",
+  "Firebase AI is temporarily rate-limited. Wait a moment and retry, or file manually.":
+    "Firebase AI sedang mencapai batas permintaan sementara. Tunggu sebentar lalu coba lagi, atau arsipkan manual.",
+  "AI analysis timed out. Retry or file manually.":
+    "Analisis AI melebihi batas waktu. Coba lagi atau arsipkan manual.",
   "Check the reading against the original image.":
     "Periksa hasil pembacaan terhadap gambar asli.",
   "Only part of the original was analyzed.":
