@@ -24,6 +24,10 @@ import {
   buildDemoSeed,
   buildDemoWorkflowSeed,
 } from "../src/demo.js";
+import {
+  maskSensitiveText,
+  redactedExportFilename,
+} from "../src/privacy-redact.js";
 import { buildInitialDemoSplits } from "../src/demo-splits.js";
 import {
   DUE_SOON_DAYS,
@@ -1512,4 +1516,61 @@ test("Firebase AI cloud model chain falls back, parses fenced JSON, and sanitize
     /App Check/,
   );
   assert.deepEqual(deniedTried, ["gemini-4-hydrogen"]);
+});
+
+test("privacy-redact masks emails, phones, and account IDs while preserving amounts and dates", async () => {
+  const sampleTransfer = [
+    "BCA Virtual Account Transfer",
+    "Date: 26 Nov 2026",
+    "Account No: 39358085697282503",
+    "Source: 6290xxxx80",
+    "NPWP: 00.130.844.9-609.000",
+    "Phone: +62 856-9728-2503",
+    "Email: alice.putri@example.com",
+    "Pay Amount: IDR 200,000.00",
+  ].join("\n");
+
+  const masked = maskSensitiveText(sampleTransfer);
+  assert.equal(masked.counts.emails, 1);
+  assert.equal(masked.counts.phones, 1);
+  assert.equal(masked.counts.accounts, 3);
+  assert.equal(masked.counts.total, 5);
+  assert.ok(masked.text.includes("[EMAIL]"));
+  assert.ok(masked.text.includes("[PHONE]"));
+  assert.ok(masked.text.includes("[ACCOUNT_ID]"));
+  assert.ok(masked.text.includes("Date: 26 Nov 2026"));
+  assert.ok(masked.text.includes("IDR 200,000.00"));
+  assert.equal(masked.text.includes("alice.putri@example.com"), false);
+  assert.equal(masked.text.includes("39358085697282503"), false);
+
+  assert.equal(redactedExportFilename("sample-receipt-1.jpg", "jpg"), "sample-receipt-1-redacted.jpg");
+  assert.equal(redactedExportFilename("birchline notice.pdf", "txt"), "birchline-notice-redacted.txt");
+
+  let sentPrompt = "";
+  const classify = classifierForModel(
+    {
+      initializeDeviceModel: async () => {},
+      generateContent: async (parts) => {
+        sentPrompt = parts[0];
+        return {
+          response: {
+            inferenceSource: "in_cloud",
+            text: () =>
+              JSON.stringify({
+                title: "BCA Transfer",
+                category: "Money & Bills",
+                confidence: "high",
+                evidence: "Pay Amount: IDR 200,000.00",
+                facts: [],
+              }),
+          },
+        };
+      },
+    },
+    { allowCloud: true, image: false, maskPii: true },
+  );
+  await classify({ text: sampleTransfer });
+  assert.ok(sentPrompt.includes("[EMAIL]"));
+  assert.ok(sentPrompt.includes("[ACCOUNT_ID]"));
+  assert.equal(sentPrompt.includes("alice.putri@example.com"), false);
 });

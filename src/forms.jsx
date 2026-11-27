@@ -30,6 +30,8 @@ import {
   getCapturePrivacyStatus,
   getDocumentPrivacyMeta,
 } from "./ai-privacy.js";
+import { maskSensitiveText } from "./privacy-redact.js";
+import { RedactExportPanel } from "./redact-export.jsx";
 import { suggestWorkflowTemplate } from "./workflow-templates.js";
 import {
   LOCAL_RECEIPT_SOURCE,
@@ -67,9 +69,12 @@ export function Mode({
   setMode,
   consent,
   setConsent,
+  maskPii = true,
+  setMaskPii,
   payloadKind,
   file,
   mime,
+  text = "",
 }) {
   const lang = useLang();
   const t = createTranslator(lang);
@@ -80,16 +85,22 @@ export function Mode({
     deviceSupported,
     consent,
   });
-  const payloadLabel =
+  const isImagePayload = Boolean(
     mime?.startsWith("image/") ||
-    payloadKind === "camera" ||
-    file?.type?.startsWith("image/")
-      ? t("payloadImage")
-      : payloadKind === "text" || mime === "text/plain"
-        ? t("payloadText")
-        : mime === "application/pdf" || file?.type === "application/pdf"
-          ? t("payloadPdf")
-          : t("payloadFallback");
+      payloadKind === "camera" ||
+      file?.type?.startsWith("image/"),
+  );
+  const payloadLabel = isImagePayload
+    ? t("payloadImage")
+    : payloadKind === "text" || mime === "text/plain"
+      ? t("payloadText")
+      : mime === "application/pdf" || file?.type === "application/pdf"
+        ? t("payloadPdf")
+        : t("payloadFallback");
+  const maskResult =
+    mode === "hybrid" && !isImagePayload && text
+      ? maskSensitiveText(text)
+      : { text: "", counts: { total: 0 } };
   return (
     <div className="mode">
       <div className="privacy-strip">
@@ -121,7 +132,7 @@ export function Mode({
         </select>
       </label>
       {mode === "hybrid" ? (
-        <div>
+        <div className="stack">
           {!deviceSupported && (
             <small>{t("onDeviceUnavailableHint")}</small>
           )}
@@ -133,6 +144,31 @@ export function Mode({
             />
             {t("cloudConsentLabel", { payload: payloadLabel })}
           </label>
+          {!isImagePayload && setMaskPii ? (
+            <div className="mask-pii-box">
+              <label className="checkline">
+                <input
+                  type="checkbox"
+                  checked={maskPii}
+                  onChange={(e) => setMaskPii(e.target.checked)}
+                />
+                <span>{t("maskPiiBeforeCloudLabel")}</span>
+              </label>
+              {maskPii && maskResult.counts.total > 0 && (
+                <div className="mask-meta-row">
+                  <span className="chip green">
+                    {t("maskPiiCountChip", { count: maskResult.counts.total })}
+                  </span>
+                  <details className="mask-preview-details">
+                    <summary>{t("previewMaskedText")}</summary>
+                    <pre className="mask-preview-pre">{maskResult.text}</pre>
+                  </details>
+                </div>
+              )}
+            </div>
+          ) : isImagePayload ? (
+            <small>{t("maskPiiImageNote")}</small>
+          ) : null}
         </div>
       ) : (
         <small>
@@ -263,7 +299,7 @@ export function Capture({
             </button>
           </div>
         )}
-        <Mode {...modeProps} payloadKind={kind} file={file} />
+        <Mode {...modeProps} payloadKind={kind} file={file} text={text} />
         {modeProps.mode === "hybrid" && !modeProps.consent && (
           <small className="consent-hint">{t("consentHintCapture")}</small>
         )}
@@ -286,7 +322,11 @@ function Original({ doc, detailsRef, defaultOpen = false }) {
   const [url, setUrl] = useState(""),
     [source, setSource] = useState(""),
     [broken, setBroken] = useState(false),
-    [missingOriginal, setMissingOriginal] = useState(false);
+    [missingOriginal, setMissingOriginal] = useState(false),
+    [redacting, setRedacting] = useState(false);
+  useEffect(() => {
+    setRedacting(false);
+  }, [doc.id]);
   useEffect(() => {
     if (defaultOpen && detailsRef?.current) detailsRef.current.open = true;
   }, [defaultOpen, detailsRef]);
@@ -347,11 +387,34 @@ function Original({ doc, detailsRef, defaultOpen = false }) {
           ) : (
             <p>{t("downloadPdfFallback")}</p>
           )}
-          {url && (
-            <a className="text-link" download={doc.name} href={url}>
-              <Download size={16} aria-hidden="true" />
-              {t("downloadOriginal")}
-            </a>
+          {(url || doc.text) && (
+            <div className="original-actions">
+              {url && (
+                <a className="text-link" download={doc.name} href={url}>
+                  <Download size={16} aria-hidden="true" />
+                  {t("downloadOriginal")}
+                </a>
+              )}
+              {(doc.mime?.startsWith("image/") ? url && !broken : Boolean(source || doc.text)) && (
+                <button
+                  type="button"
+                  className="secondary compact-btn"
+                  aria-expanded={redacting}
+                  onClick={() => setRedacting((v) => !v)}
+                >
+                  <ShieldCheck size={15} aria-hidden="true" />
+                  <span>{t("redactCopyBtn")}</span>
+                </button>
+              )}
+            </div>
+          )}
+          {redacting && (
+            <RedactExportPanel
+              doc={doc}
+              imageUrl={url}
+              sourceText={source}
+              onClose={() => setRedacting(false)}
+            />
           )}
         </>
       )}
@@ -533,7 +596,7 @@ export function Detail({
         )}
         {failed && !busy && (
           <div className="retry">
-            <Mode {...modeProps} mime={doc.mime} />
+            <Mode {...modeProps} mime={doc.mime} text={doc.text || ""} />
             {modeProps.mode === "hybrid" && !modeProps.consent && (
               <small className="consent-hint">{t("consentHintRetry")}</small>
             )}

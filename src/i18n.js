@@ -807,6 +807,30 @@ const messages = {
     askAnswerRegion: "Paperwork answer",
     askAnswerHeading: "Answer",
     askCitationsHeading: "Cited documents",
+    maskPiiBeforeCloudLabel:
+      "Mask sensitive text (phone, account, email) before Cloud AI",
+    maskPiiCountChip: ({ count }) =>
+      count === 1 ? "1 sensitive item masked" : `${count} sensitive items masked`,
+    previewMaskedText: "Preview masked text",
+    maskPiiImageNote:
+      "Text masking applies to text and PDFs; use Redact copy inside Original document before exporting or sharing a photo.",
+    redactCopyBtn: "Redact copy",
+    redactCopyHeading: "Redact copy before exporting",
+    redactOriginalSafeNote:
+      "Your original document in Tuntas is never modified — only the exported copy is redacted.",
+    redactImageHint: "Drag across names, phone numbers, or IDs to blank them out.",
+    redactBoxCount: ({ count }) =>
+      count === 1 ? "1 redaction" : `${count} redactions`,
+    redactCanvasLabel: "Redaction overlay canvas",
+    redactUndoBtn: "Undo",
+    redactClearBtn: "Clear all",
+    redactDownloadCopyBtn: "Download redacted copy",
+    redactOptEmails: "Mask emails",
+    redactOptPhones: "Mask phone numbers",
+    redactOptAccounts: "Mask account / ID numbers",
+    redactTextPreviewLabel: "Redacted text preview (editable)",
+    redactCopyTextBtn: "Copy redacted text",
+    redactDownloadTxtBtn: "Download redacted .txt",
   },
   id: {
     skipToContent: "Lewati ke konten",
@@ -1406,6 +1430,29 @@ const messages = {
     askAnswerRegion: "Jawaban dokumen",
     askAnswerHeading: "Jawaban",
     askCitationsHeading: "Dokumen rujukan",
+    maskPiiBeforeCloudLabel:
+      "Samarkan teks sensitif (telepon, rekening, email) sebelum AI Cloud",
+    maskPiiCountChip: ({ count }) => `${count} data sensitif disamarkan`,
+    previewMaskedText: "Pratinjau teks tersamarkan",
+    maskPiiImageNote:
+      "Penyamaran teks berlaku untuk teks dan PDF; gunakan Salinan tersensor di Dokumen asli sebelum mengekspor atau membagikan foto.",
+    redactCopyBtn: "Sensor salinan",
+    redactCopyHeading: "Sensor salinan sebelum mengekspor",
+    redactOriginalSafeNote:
+      "Dokumen asli Anda di Tuntas tidak pernah diubah — hanya salinan yang diekspor yang disensor.",
+    redactImageHint:
+      "Seret di atas nama, nomor telepon, atau ID untuk menutupinya.",
+    redactBoxCount: ({ count }) => `${count} kotak sensor`,
+    redactCanvasLabel: "Kanvas sensor gambar",
+    redactUndoBtn: "Urungkan",
+    redactClearBtn: "Hapus semua",
+    redactDownloadCopyBtn: "Unduh salinan tersensor",
+    redactOptEmails: "Samarkan email",
+    redactOptPhones: "Samarkan nomor telepon",
+    redactOptAccounts: "Samarkan nomor rekening / ID",
+    redactTextPreviewLabel: "Pratinjau teks tersensor (dapat diedit)",
+    redactCopyTextBtn: "Salin teks tersensor",
+    redactDownloadTxtBtn: "Unduh .txt tersensor",
   },
 };
 

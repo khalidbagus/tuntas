@@ -14,6 +14,7 @@ import {
 } from "./rag-local.js";
 import { configured } from "./engine.js";
 import { supportsDeviceAI } from "./device-ai.js";
+import { maskSensitiveText } from "./privacy-redact.js";
 import { useLang } from "./lang.js";
 import { createTranslator } from "./i18n.js";
 
@@ -23,6 +24,7 @@ export function AskPaperworkPanel({ docs = [], actions = [], online = true }) {
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState("local");
   const [consent, setConsent] = useState(false);
+  const [maskPii, setMaskPii] = useState(true);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -45,11 +47,13 @@ export function AskPaperworkPanel({ docs = [], actions = [], online = true }) {
       }
       try {
         const aiMod = await import("./firebase-ai.js");
-        const qa = aiMod.preparePaperworkQA({
-          allowCloud: mode === "hybrid" && consent && online,
-        });
+        const allowCloud = mode === "hybrid" && consent && online;
+        const qa = aiMod.preparePaperworkQA({ allowCloud });
+        const rawPrompt = buildRagPrompt(clean, matches, lang);
+        const promptText =
+          allowCloud && maskPii ? maskSensitiveText(rawPrompt).text : rawPrompt;
         const aiRes = await qa({
-          promptText: buildRagPrompt(clean, matches, lang),
+          promptText,
           validDocIds: matches.map((m) => m.doc.id),
         });
         const byId = new Map(matches.map((m) => [m.doc.id, m]));
@@ -168,14 +172,26 @@ export function AskPaperworkPanel({ docs = [], actions = [], online = true }) {
             </select>
           </label>
           {mode === "hybrid" && (
-            <label className="checkline">
-              <input
-                type="checkbox"
-                checked={consent}
-                onChange={(e) => setConsent(e.target.checked)}
-              />
-              <span>{t("askCloudConsentLabel")}</span>
-            </label>
+            <>
+              <label className="checkline">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                />
+                <span>{t("askCloudConsentLabel")}</span>
+              </label>
+              {consent && (
+                <label className="checkline">
+                  <input
+                    type="checkbox"
+                    checked={maskPii}
+                    onChange={(e) => setMaskPii(e.target.checked)}
+                  />
+                  <span>{t("maskPiiBeforeCloudLabel")}</span>
+                </label>
+              )}
+            </>
           )}
         </div>
       )}

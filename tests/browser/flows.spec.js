@@ -1858,3 +1858,89 @@ test("Demo extra receipts, itemized prefill, and interactive Demo Shared Split B
   await page.reload();
   await expect(page.getByText("Confirmed").first()).toBeVisible();
 });
+
+test("Privacy tools: Redact copy before exporting (text masking & image canvas overlay) preserves untouched originals and passes WCAG AA", async ({
+  page,
+}) => {
+  // 1. Pasted text with email, phone, and account ID -> Redact copy auto-masks & downloads -redacted.txt
+  await page.goto("/#/capture");
+  const sensitiveReceipt = [
+    "Monthly fiber bill",
+    "Customer Email: budi.santoso@example.com",
+    "Phone: +6285697282503",
+    "Virtual Account: 39358085697282503",
+    "Total: IDR 200.000",
+  ].join("\n");
+  await page.getByRole("button", { name: "Paste text" }).click();
+  await page.getByLabel("Document text").fill(sensitiveReceipt);
+  await page.getByRole("button", { name: "Save & organize" }).click();
+  await expect(page.getByRole("heading", { name: "Monthly fiber bill" })).toBeVisible();
+
+  await page.getByText("Original document", { exact: true }).click();
+  await page.getByRole("button", { name: "Redact copy" }).click();
+  const redactPanel = page.getByRole("region", { name: "Redact copy before exporting" });
+  await expect(redactPanel).toBeVisible();
+  await expect(
+    redactPanel.getByText("Your original document in Tuntas is never modified", { exact: false }),
+  ).toBeVisible();
+
+  const textArea = redactPanel.getByLabel(/Redacted text preview/);
+  await expect(textArea).toHaveValue(/\[EMAIL\]/);
+  await expect(textArea).toHaveValue(/\[PHONE\]/);
+  await expect(textArea).toHaveValue(/\[ACCOUNT_ID\]/);
+  await expect(textArea).toHaveValue(/IDR 200\.000/);
+
+  const txtDownloadPromise = page.waitForEvent("download");
+  await redactPanel.getByRole("button", { name: "Download redacted .txt" }).click();
+  const txtDownload = await txtDownloadPromise;
+  expect(txtDownload.suggestedFilename()).toMatch(/-redacted\.txt$/);
+  const txtStream = await txtDownload.createReadStream();
+  const txtChunks = [];
+  for await (const ch of txtStream) txtChunks.push(ch);
+  const txtExport = Buffer.concat(txtChunks).toString("utf8");
+  expect(txtExport).toContain("[EMAIL]");
+  expect(txtExport).not.toContain("budi.santoso@example.com");
+
+  // Reload and confirm untouched original still keeps original text
+  await page.reload();
+  await page.getByText("Original document", { exact: true }).click();
+  await expect(page.locator(".original pre")).toContainText("budi.santoso@example.com");
+
+  // 2. Demo photo receipt -> Redact copy -> draw overlay box -> Undo/Clear & Download redacted JPG
+  await page.goto("/?demo=1#/document/demo-doc-redacted-receipt-1");
+  await page.getByText("Original document", { exact: true }).click();
+  await page.getByRole("button", { name: "Redact copy" }).click();
+  const imgPanel = page.getByRole("region", { name: "Redact copy before exporting" });
+  const canvas = imgPanel.getByLabel("Redaction overlay canvas");
+  await expect(canvas).toBeVisible();
+  await expect(
+    imgPanel.getByRole("button", { name: "Download redacted copy" }),
+  ).toBeEnabled();
+  await canvas.scrollIntoViewIfNeeded();
+
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box.x + 20, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + 55);
+  await page.mouse.up();
+  await expect(imgPanel.getByText("1 redaction")).toBeVisible();
+
+  const imgAxe = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(imgAxe.violations).toEqual([]);
+
+  const jpgDownloadPromise = page.waitForEvent("download");
+  await imgPanel.getByRole("button", { name: "Download redacted copy" }).click();
+  const jpgDownload = await jpgDownloadPromise;
+  expect(jpgDownload.suggestedFilename()).toBe("sample-receipt-1-redacted.jpg");
+
+  await imgPanel.getByRole("button", { name: "Undo" }).click();
+  await expect(imgPanel.getByText("0 redactions")).toBeVisible();
+
+  await page.setViewportSize({ width: 360, height: 800 });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
+});

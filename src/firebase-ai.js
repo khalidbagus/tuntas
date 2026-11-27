@@ -13,6 +13,7 @@ import { categories } from "./domain.js";
 import { debugToken } from "./firebase-settings.js";
 import { getFirebaseApp } from "./firebase-app.js";
 import { supportsDeviceAI } from "./device-ai.js";
+import { maskSensitiveText } from "./privacy-redact.js";
 let ai;
 let appCheckInitialized = false;
 export const CLOUD_MODEL_CHAIN = [
@@ -192,7 +193,7 @@ function createHybridModel(
 }
 
 // Called directly from a user gesture. The client never silently escalates device-only to cloud.
-export function prepareAI({ allowCloud, image }) {
+export function prepareAI({ allowCloud, image, maskPii = false }) {
   const entries = CLOUD_MODEL_CHAIN.map((cloudModel) => ({
     name: cloudModel,
     create: () =>
@@ -201,7 +202,8 @@ export function prepareAI({ allowCloud, image }) {
   return async (input) =>
     runWithCloudModelFallback(
       entries,
-      (model) => classifierForModel(model, { allowCloud, image })(input),
+      (model) =>
+        classifierForModel(model, { allowCloud, image, maskPii })(input),
       { allowCloud },
     );
 }
@@ -331,7 +333,7 @@ export function preparePaperworkQA({ allowCloud }) {
 // against a fake transport without treating that transport as a successful live run.
 export function classifierForModel(
   model,
-  { allowCloud, image, deviceSupported = supportsDeviceAI() },
+  { allowCloud, image, maskPii = false, deviceSupported = supportsDeviceAI() },
 ) {
   // Firebase 13.3.0 can fall back to cloud without its Chrome adapter.
   // Unknown SDK shapes must refuse device-only inference before generation.
@@ -347,9 +349,13 @@ export function classifierForModel(
       throw Error(
         "The on-device model is unavailable. Retry in supported Chrome or file manually.",
       );
+    const outgoingText =
+      allowCloud && !image && maskPii && typeof text === "string"
+        ? maskSensitiveText(text).text
+        : text;
     const parts = image
       ? [prompt, await dataPart(blob)]
-      : [prompt + "\n\nDOCUMENT DATA:\n" + text];
+      : [prompt + "\n\nDOCUMENT DATA:\n" + outgoingText];
     const result = await model.generateContent(parts);
     if (
       !allowCloud &&

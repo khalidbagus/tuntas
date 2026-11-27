@@ -194,6 +194,7 @@ function App() {
       configured ? (supportsDeviceAI() ? "device" : "hybrid") : "rules",
     ),
     [consent, setConsent] = useState(false),
+    [maskPii, setMaskPii] = useState(true),
     [ai, setAI] = useState(null);
   const [query, setQuery] = useState(""),
     [category, setCategory] = useState(""),
@@ -483,7 +484,7 @@ function App() {
       navTo("/library");
     }
   };
-  const modeProps = { mode, setMode, consent, setConsent },
+  const modeProps = { mode, setMode, consent, setConsent, maskPii, setMaskPii },
     ready =
       mode === "rules" || (!!ai && (mode !== "hybrid" || (consent && online)));
   async function work({ payload, existing, sampleRun = false }) {
@@ -502,6 +503,7 @@ function App() {
       try {
         classify = ai.prepareAI({
           allowCloud: mode === "hybrid" && consent,
+          maskPii: mode === "hybrid" && consent && maskPii,
           image: (existing?.mime || payload?.file?.type || "").startsWith(
             "image/",
           ),
